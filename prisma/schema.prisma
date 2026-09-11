@@ -1,0 +1,745 @@
+// =============================================================================
+// jakselproperti.com — Database Schema
+// Based on Blueprint v0.3
+// Provider: MySQL (Laragon local dev / Production)
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+enum PropertyType {
+  HOUSE
+  APARTMENT
+  LAND
+  SHOPHOUSE
+}
+
+enum ListingStatus {
+  DRAFT
+  PENDING_VERIFICATION
+  READY_TO_PUBLISH
+  ACTIVE
+  IN_NEGOTIATION
+  SOLD
+  SUSPENDED
+  WITHDRAWN
+  EXPIRED
+  ARCHIVED
+}
+
+enum CertificateType {
+  SHM    // Sertifikat Hak Milik
+  SHGB   // Sertifikat Hak Guna Bangunan
+  SHSRS  // Sertifikat Hak Satuan Rumah Susun
+  AJB    // Akta Jual Beli
+  GIRIK  // Girik/Letter C
+  PPJB   // Perjanjian Pengikatan Jual Beli
+  OTHER
+}
+
+enum MediaType {
+  PHOTO
+  VIDEO
+  FLOOR_PLAN
+}
+
+enum DocumentType {
+  CERTIFICATE
+  IDENTITY
+  POWER_OF_ATTORNEY
+  CONSIGNMENT_AGREEMENT
+  COMMUNICATION_PROOF
+  LEGAL_OTHER
+}
+
+enum DocumentStatus {
+  NOT_AVAILABLE
+  AVAILABLE
+  VERIFIED
+  EXPIRED
+}
+
+enum LeadStage {
+  NEW           // Baru
+  QUALIFIED     // Kualifikasi
+  VIEWING       // Survei
+  NEGOTIATING   // Negosiasi
+  WON           // Closing - Menang
+  LOST          // Closing - Hilang
+}
+
+enum LeadSource {
+  WEBSITE
+  WHATSAPP
+  REFERRAL
+  SOCIAL_MEDIA
+  OTHER
+}
+
+enum OfferStatus {
+  PENDING
+  COUNTERED
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  WITHDRAWN
+}
+
+enum ViewingStatus {
+  SCHEDULED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum TrustLevel {
+  NEW
+  VERIFIED
+  TRUSTED
+  BLACKLISTED
+}
+
+enum IntermediaryRole {
+  PRIMARY_SOURCE
+  SECONDARY_SOURCE
+  REFERRER
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  STATUS_CHANGE
+  LOGIN
+  LOGOUT
+}
+
+// =============================================================================
+// ACCESS & AUTH
+// =============================================================================
+
+/// Admin internal — membuat/update listing, mengelola semua data
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  password  String   // hashed — auth implementation nanti
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  auditLogs            AuditLog[]
+  listingStatusChanges ListingStatusHistory[]
+  priceChanges         PriceHistory[]
+  leadActivities       LeadActivity[]
+
+  @@map("users")
+}
+
+/// Log aktivitas admin — setiap aksi penting dicatat
+model AuditLog {
+  id         String      @id @default(uuid())
+  userId     String
+  action     AuditAction
+  entityType String      // e.g. "property", "listing", "owner"
+  entityId   String
+  details    Json?       // snapshot perubahan
+  ipAddress  String?
+  createdAt  DateTime    @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// =============================================================================
+// AREA & KAWASAN (STRUKTUR 2-LAYER — Section 15.3)
+// =============================================================================
+
+/// 10 Kecamatan resmi Jakarta Selatan (data administratif & pelaporan)
+model Area {
+  id        String   @id @default(uuid())
+  name      String   // e.g. "Kebayoran Baru", "Cilandak", "Mampang Prapatan"
+  slug      String   @unique
+  parentId  String?  // null = kecamatan, filled = kelurahan (hierarki administratif)
+  level     Int      @default(1) // 1 = kecamatan, 2 = kelurahan
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  parent     Area?      @relation("AreaHierarchy", fields: [parentId], references: [id])
+  children   Area[]     @relation("AreaHierarchy")
+  kawasan    Kawasan[]
+  properties Property[]
+
+  @@index([parentId])
+  @@index([slug])
+  @@map("areas")
+}
+
+/// Kawasan populer / branded (Kemang, Senopati, Pondok Indah, dll)
+/// Terhubung ke kecamatan induk lewat areaId (Section 15.3)
+/// Ditampilkan sebagai banner promosi di homepage ("Kawasan Pilihan") & landing page SEO
+model Kawasan {
+  id          String   @id @default(uuid())
+  name        String   // e.g. "Kemang", "Senopati", "Pondok Indah"
+  slug        String   @unique
+  areaId      String   // Terhubung ke salah satu dari 10 kecamatan resmi
+  tagline     String?  // Tagline banner promo homepage
+  bannerImage String?  // URL/path foto banner kawasan
+  isFeatured  Boolean  @default(false) // Toggle tampil di banner homepage
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  area       Area       @relation(fields: [areaId], references: [id])
+  properties Property[]
+
+  @@index([areaId])
+  @@index([isFeatured])
+  @@index([slug])
+  @@map("kawasan")
+}
+
+// =============================================================================
+// PIHAK TERKAIT (INTERNAL)
+// =============================================================================
+
+/// Pemilik properti — data bersifat internal
+model Owner {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String?
+  email     String?
+  idNumber  String?  // KTP/passport — encrypted at rest nanti
+  address   String?  @db.Text
+  notes     String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  propertyOwners PropertyOwner[]
+
+  @@index([name])
+  @@index([phone])
+  @@map("owners")
+}
+
+/// Perantara/broker — pembawa info properti ke tim dengan Trust Level (Section 5 & 15.1)
+model Intermediary {
+  id         String      @id @default(uuid())
+  name       String
+  phone      String?
+  email      String?
+  company    String?     // nama kantor broker jika ada
+  trustLevel TrustLevel  @default(NEW)
+  notes      String?     @db.Text
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  // Relations
+  listingIntermediaries ListingIntermediary[]
+
+  @@index([name])
+  @@index([phone])
+  @@index([trustLevel])
+  @@map("intermediaries")
+}
+
+// =============================================================================
+// PROPERTI (ASET FISIK)
+// =============================================================================
+
+/// Properti — aset fisik yang tidak berubah karena status pemasaran
+/// Satu properti bisa punya beberapa riwayat listing (Section 6)
+model Property {
+  id              String       @id @default(uuid())
+  code            String       @unique // e.g. "JS-0001" — auto-generated
+  type            PropertyType
+  areaId          String       // Kecamatan resmi (administratif)
+  kawasanId       String?      // Kawasan populer / branded (opsional marketing)
+
+  // Lokasi (internal)
+  address         String       @db.Text // alamat lengkap — internal only
+  latitude        Decimal?     @db.Decimal(10, 8)
+  longitude       Decimal?     @db.Decimal(11, 8)
+
+  // Spesifikasi
+  landArea        Int?         // m²
+  buildingArea    Int?         // m²
+  bedrooms        Int?
+  bathrooms       Int?
+  floors          Int?         @default(1)
+  garages         Int?         @default(0)
+  carports        Int?         @default(0)
+
+  // Sertifikat
+  certificateType CertificateType?
+  certificateNo   String?      // internal only
+
+  // Bangunan
+  yearBuilt       Int?
+  facing          String?      // Utara, Selatan, dll
+  electricity     Int?         // watt
+  waterSource     String?      // PAM, sumur, dll
+
+  // Internal
+  internalNotes   String?      @db.Text
+
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  // Relations
+  area            Area              @relation(fields: [areaId], references: [id])
+  kawasan         Kawasan?          @relation(fields: [kawasanId], references: [id])
+  listings        Listing[]
+  propertyOwners  PropertyOwner[]
+  propertyMedia   PropertyMedia[]
+  documents       Document[]
+  auctionRecords  AuctionRecord[]
+  amenities       PropertyAmenity[]
+
+  @@index([areaId])
+  @@index([kawasanId])
+  @@index([type])
+  @@index([code])
+  @@map("properties")
+}
+
+// Flexible internal intake for Jabodetabek; optional link to the verified asset.
+// Each record represents one marketing/auction period, including repeat auctions.
+model AuctionRecord {
+  id              String @id @default(uuid())
+  propertyId      String?
+  property        Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  title           String @db.VarChar(255)
+  category        String @default("AUCTION") @db.VarChar(32)
+  propertyType    String @default("HOUSE") @db.VarChar(32)
+  city            String? @db.VarChar(120)
+  district        String? @db.VarChar(120)
+  address         String? @db.Text
+  description     String? @db.Text
+  specifications  String? @db.Text
+  limitPrice      Decimal? @db.Decimal(15, 0)
+  depositAmount   Decimal? @db.Decimal(15, 0)
+  seller          String? @db.VarChar(255)
+  organizer       String? @db.VarChar(255)
+  contactName     String? @db.VarChar(255)
+  contactPhone    String? @db.VarChar(80)
+  sourceUrl       String? @db.VarChar(1000)
+  sourceText      String? @db.Text
+  termsNotes      String? @db.Text
+  status          String @default("DRAFT") @db.VarChar(32)
+  activeFrom      DateTime? @db.Date
+  durationMonths  Int?
+  activeUntil     DateTime? @db.Date
+  auctionAt       DateTime?
+  depositDeadline DateTime?
+  resultNotes     String? @db.Text
+  photos          Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([propertyId])
+  @@index([status, activeUntil])
+  @@index([city])
+  @@map("auction_records")
+}
+
+/// Junction: Property ↔ Owner (many-to-many)
+/// Satu properti bisa punya beberapa owner; satu owner bisa punya banyak properti
+model PropertyOwner {
+  id         String   @id @default(uuid())
+  propertyId String
+  ownerId    String
+  isPrimary  Boolean  @default(false)
+  notes      String?  @db.Text
+  createdAt  DateTime @default(now())
+
+  // Relations
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  owner    Owner    @relation(fields: [ownerId], references: [id])
+
+  @@unique([propertyId, ownerId])
+  @@index([ownerId])
+  @@map("property_owners")
+}
+
+// =============================================================================
+// LISTING (PERIODE PENAWARAN PENJUALAN)
+// =============================================================================
+
+/// Listing — satu periode/penawaran penjualan properti
+/// Satu properti bisa punya beberapa listing di waktu berbeda (Section 6)
+model Listing {
+  id               String        @id @default(uuid())
+  propertyId       String
+  status           ListingStatus @default(DRAFT)
+
+  // Harga
+  askingPrice      Decimal       @db.Decimal(15, 0) // Rp — harga yang ditawarkan
+  minimumPrice     Decimal?      @db.Decimal(15, 0) // Rp — harga minimum owner (internal)
+  priceOnRequest   Boolean       @default(false)    // sembunyikan harga dari publik
+
+  // Konten publik
+  title            String?       @db.VarChar(255)
+  description      String?       @db.Text // deskripsi publik
+  showFullAddress  Boolean       @default(false) // per-listing basis (Section 15.1 #8)
+  videoUrl         String?       @db.VarChar(500) // URL YouTube / Instagram Reels / TikTok tour
+  videoPlatform    String?       @db.VarChar(50)  // YOUTUBE, INSTAGRAM, TIKTOK, OTHER
+
+  // Konsinyasi
+  consignmentStartDate DateTime?
+  consignmentEndDate   DateTime?
+  consignmentNotes     String?   @db.Text
+
+  // Internal
+  internalNotes    String?       @db.Text
+  publishedAt      DateTime?
+  archivedAt       DateTime?
+
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  // Relations
+  property              Property               @relation(fields: [propertyId], references: [id])
+  listingIntermediaries ListingIntermediary[]
+  listingSources        ListingSource[]
+  statusHistory         ListingStatusHistory[]
+  priceHistory          PriceHistory[]
+  leads                 Lead[]
+  viewingSchedules      ViewingSchedule[]
+  offers                Offer[]
+
+  @@index([propertyId])
+  @@index([status])
+  @@index([askingPrice])
+  @@index([createdAt])
+  @@map("listings")
+}
+
+/// Junction: Listing ↔ Intermediary (many-to-many)
+/// Dengan posisi dalam rantai dan info komisi (Section 5)
+model ListingIntermediary {
+  id              String           @id @default(uuid())
+  listingId       String
+  intermediaryId  String
+  role            IntermediaryRole @default(PRIMARY_SOURCE)
+  chainPosition   Int              @default(1) // posisi dalam rantai perantara
+  commissionNotes String?          @db.Text   // catatan komisi (MVP: belum breakdown)
+  notes           String?          @db.Text
+  createdAt       DateTime         @default(now())
+
+  // Relations
+  listing      Listing      @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  intermediary Intermediary @relation(fields: [intermediaryId], references: [id])
+
+  @@unique([listingId, intermediaryId])
+  @@index([intermediaryId])
+  @@map("listing_intermediaries")
+}
+
+/// Rantai sumber informasi properti (Section 5)
+model ListingSource {
+  id          String   @id @default(uuid())
+  listingId   String
+  sourceName  String   // nama sumber (bisa owner langsung atau perantara)
+  sourceType  String   // "owner", "intermediary"
+  sourceId    String?  // reference ke owners/intermediaries ID
+  receivedAt  DateTime @default(now())
+  notes       String?  @db.Text
+
+  // Relations
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@map("listing_sources")
+}
+
+// =============================================================================
+// FASILITAS / AMENITIES
+// =============================================================================
+
+/// Fasilitas properti — master data
+model Amenity {
+  id        String   @id @default(uuid())
+  name      String   @unique // e.g. "Kolam Renang", "Garasi", "Taman"
+  slug      String   @unique
+  icon      String?  // lucide icon name
+  category  String?  // grouping: "Outdoor", "Interior", "Security", dll
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  // Relations
+  properties PropertyAmenity[]
+
+  @@map("amenities")
+}
+
+/// Junction: Property ↔ Amenity (many-to-many)
+model PropertyAmenity {
+  id         String @id @default(uuid())
+  propertyId String
+  amenityId  String
+
+  // Relations
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  amenity  Amenity  @relation(fields: [amenityId], references: [id])
+
+  @@unique([propertyId, amenityId])
+  @@index([amenityId])
+  @@map("property_amenities")
+}
+
+// =============================================================================
+// MEDIA & DOKUMEN (SINGLE STORAGE: R2 — Section 11 & 12)
+// =============================================================================
+
+/// Foto, video, denah properti
+/// Database hanya menyimpan metadata & path relatif — file di Cloudflare R2
+model PropertyMedia {
+  id          String    @id @default(uuid())
+  propertyId  String
+  type        MediaType @default(PHOTO)
+
+  // File info (relative path di R2)
+  fileName    String
+  filePath    String    // relative path di storage (e.g. "properties/JS-0001/photo-1.webp")
+  fileSize    Int       // bytes
+  mimeType    String
+  width       Int?      // pixels
+  height      Int?      // pixels
+  fileHash    String?   // hash untuk deteksi duplikat foto
+
+  // Thumbnails & variants
+  thumbnailPath String? // path ke thumbnail
+  webpPath      String? // path ke WebP version
+  externalUrl   String? @db.VarChar(500) // URL embed eksternal jika ada (YouTube/Reels)
+  duration      Int?    // Durasi video dalam detik (jika tipe VIDEO)
+
+  // Display
+  sortOrder   Int       @default(0) // urutan galeri
+  isPrimary   Boolean   @default(false) // foto utama
+  isPublic    Boolean   @default(true)  // tampil di publik
+  altText     String?   // SEO alt text
+  caption     String?
+
+  // Watermark (opsional per foto — Section 15.1 #9)
+  hasWatermark Boolean  @default(false)
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+  @@index([isPrimary])
+  @@index([sortOrder])
+  @@map("property_media")
+}
+
+/// Referensi dokumen legal (Section 14)
+/// MVP: hanya catat status/referensi, bukan file fisik (Section 15.1 #4)
+model Document {
+  id           String         @id @default(uuid())
+  propertyId   String
+  type         DocumentType
+  status       DocumentStatus @default(NOT_AVAILABLE)
+  referenceNo  String?        // nomor dokumen jika ada
+  notes        String?        @db.Text
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  // Relations
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+  @@index([type])
+  @@map("documents")
+}
+
+// =============================================================================
+// RIWAYAT
+// =============================================================================
+
+/// Riwayat perubahan status listing (Section 8)
+model ListingStatusHistory {
+  id         String        @id @default(uuid())
+  listingId  String
+  fromStatus ListingStatus?
+  toStatus   ListingStatus
+  changedBy  String        // userId
+  reason     String?       @db.Text
+  createdAt  DateTime      @default(now())
+
+  // Relations
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [changedBy], references: [id])
+
+  @@index([listingId])
+  @@index([createdAt])
+  @@map("listing_status_history")
+}
+
+/// Riwayat perubahan harga listing
+model PriceHistory {
+  id        String   @id @default(uuid())
+  listingId String
+  oldPrice  Decimal  @db.Decimal(15, 0)
+  newPrice  Decimal  @db.Decimal(15, 0)
+  changedBy String   // userId
+  reason    String?  @db.Text
+  createdAt DateTime @default(now())
+
+  // Relations
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [changedBy], references: [id])
+
+  @@index([listingId])
+  @@index([createdAt])
+  @@map("price_history")
+}
+
+// =============================================================================
+// CRM / CUSTOMERS & LEADS (KANBAN — Section 15.4)
+// =============================================================================
+
+/// Calon pembeli unik — nomor HP sebagai kunci dedupe (Section 15.4)
+model Customer {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String   @unique // Kunci dedupe utama
+  email     String?
+  notes     String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  leads Lead[]
+
+  @@index([phone])
+  @@index([name])
+  @@map("customers")
+}
+
+/// Lead — penghubung customer ↔ listing dengan kanban stage (Section 15.4)
+/// Kolom kanban: Baru → Kualifikasi → Survei → Negosiasi → Closing (Menang / Hilang)
+model Lead {
+  id           String     @id @default(uuid())
+  customerId   String
+  listingId    String
+  currentStage LeadStage  @default(NEW)
+  source       LeadSource @default(WEBSITE)
+
+  // Pesan inquiry
+  message      String?    @db.Text
+
+  // Internal
+  notes        String?    @db.Text
+  priority     Int        @default(0) // 0 = normal, 1 = high, 2 = urgent
+
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  // Relations
+  customer         Customer          @relation(fields: [customerId], references: [id])
+  listing          Listing           @relation(fields: [listingId], references: [id])
+  activities       LeadActivity[]
+  viewingSchedules ViewingSchedule[]
+  offers           Offer[]
+
+  @@index([customerId])
+  @@index([listingId])
+  @@index([currentStage])
+  @@index([createdAt])
+  @@map("leads")
+}
+
+/// Log aktivitas & riwayat perpindahan stage kanban lead (Section 15.4)
+model LeadActivity {
+  id        String     @id @default(uuid())
+  leadId    String
+  userId    String     // admin yang update
+  fromStage LeadStage?
+  toStage   LeadStage?
+  type      String     // "STAGE_CHANGE", "CALL", "WHATSAPP", "NOTE", "MEETING"
+  summary   String?    @db.Text
+  createdAt DateTime   @default(now())
+
+  // Relations
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([leadId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("lead_activities")
+}
+
+/// Jadwal survei/viewing properti
+model ViewingSchedule {
+  id          String        @id @default(uuid())
+  leadId      String
+  listingId   String
+  status      ViewingStatus @default(SCHEDULED)
+  scheduledAt DateTime
+  duration    Int?          @default(60) // menit
+  location    String?       // bisa beda dari alamat properti
+  notes       String?       @db.Text
+  feedback    String?       @db.Text // hasil survei
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Relations
+  lead    Lead    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listingId], references: [id])
+
+  @@index([leadId])
+  @@index([listingId])
+  @@index([scheduledAt])
+  @@map("viewing_schedules")
+}
+
+/// Penawaran harga dari calon pembeli
+model Offer {
+  id            String      @id @default(uuid())
+  leadId        String
+  listingId     String
+  status        OfferStatus @default(PENDING)
+  amount        Decimal     @db.Decimal(15, 0) // Rp
+  counterAmount Decimal?    @db.Decimal(15, 0) // counter-offer dari owner
+  notes         String?     @db.Text
+  validUntil    DateTime?   // berlaku sampai
+  respondedAt   DateTime?   // waktu respons
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  // Relations
+  lead    Lead    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listingId], references: [id])
+
+  @@index([leadId])
+  @@index([listingId])
+  @@index([status])
+  @@map("offers")
+}

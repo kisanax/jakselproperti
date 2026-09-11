@@ -1,0 +1,1037 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import {
+  ArrowLeft,
+  Building2,
+  Tag,
+  TrendingUp,
+  History,
+  Edit2,
+  CheckCircle,
+  X,
+  Save,
+  DollarSign,
+  Eye,
+  EyeOff,
+  UserCheck,
+} from "lucide-react";
+import { toast, Toaster } from "sonner";
+
+interface ListingDetailProps {
+  listing: {
+    id: string;
+    propertyId: string;
+    title: string | null;
+    description: string | null;
+    status: string;
+    askingPrice: number;
+    minimumPrice: number | null;
+    priceOnRequest: boolean;
+    showFullAddress: boolean;
+    publishedAt: string | null;
+    archivedAt: string | null;
+    internalNotes: string | null;
+    createdAt: string;
+    updatedAt: string;
+    property: {
+      id: string;
+      code: string;
+      type: string;
+      address: string;
+      landArea: number | null;
+      buildingArea: number | null;
+      bedrooms: number | null;
+      bathrooms: number | null;
+      certificateType: string | null;
+      area: {
+        name: string;
+      };
+      propertyMedia: {
+        id: string;
+        url: string;
+        isPrimary: boolean;
+      }[];
+    };
+    statusHistory: {
+      id: string;
+      fromStatus: string | null;
+      toStatus: string;
+      reason: string | null;
+      createdAt: string;
+      user: {
+        name: string | null;
+      } | null;
+    }[];
+    priceHistory: {
+      id: string;
+      oldPrice: number;
+      newPrice: number;
+      reason: string | null;
+      createdAt: string;
+      user: {
+        name: string | null;
+      } | null;
+    }[];
+    listingIntermediaries: {
+      id: string;
+      chainPosition: number;
+      intermediary: {
+        id: string;
+        name: string;
+        phone: string | null;
+        company: string | null;
+        trustLevel: string;
+      };
+    }[];
+  };
+  validTransitions: string[];
+}
+
+function getStatusBadgeClass(s: string) {
+  const m: Record<string, string> = {
+    DRAFT: "admin-badge-draft",
+    PENDING_VERIFICATION: "admin-badge-pending",
+    READY_TO_PUBLISH: "admin-badge-ready",
+    ACTIVE: "admin-badge-active",
+    IN_NEGOTIATION: "admin-badge-negotiation",
+    SOLD: "admin-badge-sold",
+    SUSPENDED: "admin-badge-suspended",
+    WITHDRAWN: "admin-badge-withdrawn",
+    EXPIRED: "admin-badge-expired",
+    ARCHIVED: "admin-badge-archived",
+  };
+  return m[s] || "admin-badge-draft";
+}
+
+function getStatusLabel(s: string) {
+  const m: Record<string, string> = {
+    DRAFT: "Draft",
+    PENDING_VERIFICATION: "Verifikasi",
+    READY_TO_PUBLISH: "Siap Publish",
+    ACTIVE: "Aktif (Tayang)",
+    IN_NEGOTIATION: "Dalam Negosiasi",
+    SOLD: "Terjual",
+    SUSPENDED: "Ditunda",
+    WITHDRAWN: "Ditarik",
+    EXPIRED: "Kedaluwarsa",
+    ARCHIVED: "Diarsipkan",
+  };
+  return m[s] || s;
+}
+
+function formatRupiah(num: number): string {
+  if (num >= 1e9) return `Rp ${(num / 1e9).toFixed(2).replace(/\.00$/, "")} Miliar`;
+  if (num >= 1e6) return `Rp ${(num / 1e6).toFixed(0)} Juta`;
+  return `Rp ${num.toLocaleString("id-ID")}`;
+}
+
+function formatDate(dateStr: string): string {
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(dateStr));
+}
+
+export default function ListingDetailClient({
+  listing: initialListing,
+  validTransitions: initialTransitions,
+}: ListingDetailProps) {
+  const [listing, setListing] = useState(initialListing);
+  const [validTransitions, setValidTransitions] = useState(initialTransitions);
+
+  // Status Change Modal
+  const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [selectedNewStatus, setSelectedNewStatus] = useState("");
+  const [statusReason, setStatusReason] = useState("");
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+
+  // Price Change Modal
+  const [priceModalOpen, setPriceModalOpen] = useState(false);
+  const [newAskingPrice, setNewAskingPrice] = useState(listing.askingPrice.toString());
+  const [newMinimumPrice, setNewMinimumPrice] = useState(
+    listing.minimumPrice ? listing.minimumPrice.toString() : ""
+  );
+  const [priceReason, setPriceReason] = useState("");
+  const [isUpdatingPrice, setIsUpdatingPrice] = useState(false);
+
+  // Listing Details Edit Modal
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [title, setTitle] = useState(listing.title || "");
+  const [description, setDescription] = useState(listing.description || "");
+  const [internalNotes, setInternalNotes] = useState(listing.internalNotes || "");
+  const [priceOnRequest, setPriceOnRequest] = useState(listing.priceOnRequest);
+  const [showFullAddress, setShowFullAddress] = useState(listing.showFullAddress);
+  const [isUpdatingDetails, setIsUpdatingDetails] = useState(false);
+
+  // Open Status Modal
+  const handleOpenStatusModal = (nextStatus: string) => {
+    setSelectedNewStatus(nextStatus);
+    setStatusReason("");
+    setStatusModalOpen(true);
+  };
+
+  // Submit Status Change
+  const handleStatusSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedNewStatus) return;
+
+    setIsUpdatingStatus(true);
+    try {
+      const res = await fetch(`/api/listings/${listing.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: selectedNewStatus,
+          statusReason: statusReason.trim() || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal mengubah status");
+
+      toast.success(`Status listing berhasil diubah ke ${getStatusLabel(selectedNewStatus)}`);
+      // Refetch detail
+      const getRes = await fetch(`/api/listings/${listing.id}`);
+      const getData = await getRes.json();
+      if (getRes.ok && getData.listing) {
+        setListing({
+          ...getData.listing,
+          askingPrice: Number(getData.listing.askingPrice),
+          minimumPrice: getData.listing.minimumPrice ? Number(getData.listing.minimumPrice) : null,
+          statusHistory: getData.listing.statusHistory.map((s: { createdAt: string | Date }) => ({
+            ...s,
+            createdAt: new Date(s.createdAt).toISOString(),
+          })),
+          priceHistory: getData.listing.priceHistory.map((p: { oldPrice: number | string; newPrice: number | string; createdAt: string | Date }) => ({
+            ...p,
+            oldPrice: Number(p.oldPrice),
+            newPrice: Number(p.newPrice),
+            createdAt: new Date(p.createdAt).toISOString(),
+          })),
+        });
+        setValidTransitions(getData.validTransitions || []);
+      }
+      setStatusModalOpen(false);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Gagal mengubah status";
+      toast.error(msg);
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
+
+  // Submit Price Change
+  const handlePriceSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const priceNum = Number(newAskingPrice);
+    if (isNaN(priceNum) || priceNum <= 0) {
+      toast.error("Harga penawaran harus berupa angka valid");
+      return;
+    }
+
+    setIsUpdatingPrice(true);
+    try {
+      const res = await fetch(`/api/listings/${listing.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          askingPrice: priceNum,
+          minimumPrice: newMinimumPrice ? Number(newMinimumPrice) : null,
+          priceChangeReason: priceReason.trim() || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal mengubah harga");
+
+      toast.success("Harga listing berhasil diperbarui");
+      // Refetch detail
+      const getRes = await fetch(`/api/listings/${listing.id}`);
+      const getData = await getRes.json();
+      if (getRes.ok && getData.listing) {
+        setListing({
+          ...getData.listing,
+          askingPrice: Number(getData.listing.askingPrice),
+          minimumPrice: getData.listing.minimumPrice ? Number(getData.listing.minimumPrice) : null,
+          statusHistory: getData.listing.statusHistory.map((s: { createdAt: string | Date }) => ({
+            ...s,
+            createdAt: new Date(s.createdAt).toISOString(),
+          })),
+          priceHistory: getData.listing.priceHistory.map((p: { oldPrice: number | string; newPrice: number | string; createdAt: string | Date }) => ({
+            ...p,
+            oldPrice: Number(p.oldPrice),
+            newPrice: Number(p.newPrice),
+            createdAt: new Date(p.createdAt).toISOString(),
+          })),
+        });
+      }
+      setPriceModalOpen(false);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Gagal mengubah harga";
+      toast.error(msg);
+    } finally {
+      setIsUpdatingPrice(false);
+    }
+  };
+
+  // Submit Details Edit
+  const handleDetailsSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsUpdatingDetails(true);
+    try {
+      const res = await fetch(`/api/listings/${listing.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: title.trim() || null,
+          description: description.trim() || null,
+          internalNotes: internalNotes.trim() || null,
+          priceOnRequest,
+          showFullAddress,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal update detail");
+
+      setListing((prev) => ({
+        ...prev,
+        title: data.listing.title,
+        description: data.listing.description,
+        internalNotes: data.listing.internalNotes,
+        priceOnRequest: data.listing.priceOnRequest,
+        showFullAddress: data.listing.showFullAddress,
+      }));
+      toast.success("Detail listing berhasil diperbarui");
+      setDetailModalOpen(false);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Gagal update detail";
+      toast.error(msg);
+    } finally {
+      setIsUpdatingDetails(false);
+    }
+  };
+
+  return (
+    <div className="animate-fade-in">
+      <Toaster position="top-right" richColors />
+
+      {/* Top navigation */}
+      <div style={{ marginBottom: 20 }}>
+        <Link
+          href="/admin/listings"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: 13,
+            color: "var(--color-admin-text-secondary)",
+            textDecoration: "none",
+            marginBottom: 12,
+          }}
+        >
+          <ArrowLeft size={16} /> Kembali ke daftar listing
+        </Link>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            flexWrap: "wrap",
+            gap: 16,
+          }}
+        >
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+              <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>
+                {listing.title || `Listing ${listing.property.code}`}
+              </h1>
+              <span className={`admin-badge ${getStatusBadgeClass(listing.status)}`}>
+                {getStatusLabel(listing.status)}
+              </span>
+            </div>
+            <p style={{ fontSize: 14, color: "var(--color-admin-text-secondary)", margin: 0 }}>
+              Kode Properti:{" "}
+              <Link
+                href={`/admin/properties/${listing.property.id}`}
+                style={{
+                  color: "var(--color-admin-accent)",
+                  fontWeight: 600,
+                  textDecoration: "none",
+                }}
+              >
+                {listing.property.code} ↗
+              </Link>{" "}
+              • {listing.property.area.name}
+            </p>
+          </div>
+
+          {/* Quick Action Buttons */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <button
+              onClick={() => {
+                setTitle(listing.title || "");
+                setDescription(listing.description || "");
+                setInternalNotes(listing.internalNotes || "");
+                setPriceOnRequest(listing.priceOnRequest);
+                setShowFullAddress(listing.showFullAddress);
+                setDetailModalOpen(true);
+              }}
+              className="admin-btn admin-btn-secondary"
+              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+            >
+              <Edit2 size={14} /> Edit Detail
+            </button>
+            <button
+              onClick={() => {
+                setNewAskingPrice(listing.askingPrice.toString());
+                setNewMinimumPrice(
+                  listing.minimumPrice ? listing.minimumPrice.toString() : ""
+                );
+                setPriceReason("");
+                setPriceModalOpen(true);
+              }}
+              className="admin-btn admin-btn-secondary"
+              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+            >
+              <DollarSign size={14} /> Ubah Harga
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Workflow Status Action Bar */}
+      <div
+        className="admin-card"
+        style={{
+          background: "var(--color-admin-bg)",
+          borderColor: "var(--color-admin-border)",
+          marginBottom: 24,
+          padding: "16px 20px",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: 12,
+          }}
+        >
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--color-admin-text-muted)", textTransform: "uppercase" }}>
+              Aksi Status Alur Kerja (Workflow)
+            </div>
+            <div style={{ fontSize: 14, color: "var(--color-admin-text-secondary)", marginTop: 2 }}>
+              Status saat ini: <strong>{getStatusLabel(listing.status)}</strong>. Pilih langkah berikutnya:
+            </div>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            {validTransitions.length === 0 ? (
+              <span style={{ fontSize: 13, color: "var(--color-admin-text-muted)" }}>
+                Listing ini berada pada status akhir ({getStatusLabel(listing.status)}).
+              </span>
+            ) : (
+              validTransitions.map((next) => (
+                <button
+                  key={next}
+                  onClick={() => handleOpenStatusModal(next)}
+                  className={`admin-btn ${
+                    next === "ACTIVE"
+                      ? "admin-btn-primary"
+                      : next === "SOLD"
+                      ? "admin-btn-primary"
+                      : "admin-btn-secondary"
+                  }`}
+                  style={{
+                    fontSize: 13,
+                    padding: "6px 14px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <CheckCircle size={14} /> Pindah ke: {getStatusLabel(next)}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Main 2-column Grid */}
+      <div className="admin-detail-layout">
+        {/* Left Column: Details & Histories */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          {/* Pricing & Privacy Card */}
+          <div className="admin-card">
+            <div className="admin-card-header">
+              <div className="admin-card-title">
+                <Tag size={16} style={{ display: "inline", marginRight: 6 }} />
+                Informasi Harga & Privasi
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div>
+                <div style={{ fontSize: 12, color: "var(--color-admin-text-muted)" }}>Harga Penawaran (Asking Price)</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: "var(--color-admin-accent)", marginTop: 4 }}>
+                  {listing.priceOnRequest ? (
+                    <span style={{ fontStyle: "italic", fontSize: 16, color: "var(--color-admin-text-secondary)" }}>
+                      Price on Request
+                    </span>
+                  ) : (
+                    formatRupiah(listing.askingPrice)
+                  )}
+                </div>
+                {!listing.priceOnRequest && (
+                  <div style={{ fontSize: 12, color: "var(--color-admin-text-muted)", marginTop: 2 }}>
+                    Nominal asli: Rp {listing.askingPrice.toLocaleString("id-ID")}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div style={{ fontSize: 12, color: "var(--color-admin-text-muted)" }}>Batas Minimum (Owner Nett/Bottom)</div>
+                <div style={{ fontSize: 18, fontWeight: 600, marginTop: 4 }}>
+                  {listing.minimumPrice ? formatRupiah(listing.minimumPrice) : "—"}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--color-admin-text-muted)", marginTop: 2 }}>
+                  Hanya terlihat oleh tim internal admin
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                marginTop: 16,
+                paddingTop: 14,
+                borderTop: "1px solid var(--color-admin-border)",
+                display: "flex",
+                gap: 24,
+                fontSize: 13,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {listing.priceOnRequest ? <EyeOff size={16} style={{ color: "#eab308" }} /> : <Eye size={16} style={{ color: "#10b981" }} />}
+                <span>
+                  Price on Request: <strong>{listing.priceOnRequest ? "Aktif (Harga Disembunyikan)" : "Tidak (Harga Ditampilkan)"}</strong>
+                </span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {listing.showFullAddress ? <Eye size={16} style={{ color: "#10b981" }} /> : <EyeOff size={16} style={{ color: "#eab308" }} />}
+                <span>
+                  Alamat Lengkap Publik: <strong>{listing.showFullAddress ? "Ditampilkan" : "Disamarkan"}</strong>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Description & Internal Notes */}
+          <div className="admin-card">
+            <div className="admin-card-header">
+              <div className="admin-card-title">Deskripsi & Catatan Listing</div>
+            </div>
+            <div style={{ fontSize: 14, lineHeight: 1.6, color: "var(--color-admin-text)", whiteSpace: "pre-wrap" }}>
+              {listing.description || "Belum ada deskripsi pemasaran publik."}
+            </div>
+
+            {listing.internalNotes && (
+              <div
+                style={{
+                  marginTop: 16,
+                  padding: "12px 14px",
+                  borderRadius: 8,
+                  background: "var(--color-admin-bg)",
+                  borderLeft: "4px solid var(--color-admin-accent)",
+                  fontSize: 13,
+                }}
+              >
+                <div style={{ fontWeight: 600, marginBottom: 4, color: "var(--color-admin-text)" }}>
+                  Catatan Internal / Strategi Negosiasi:
+                </div>
+                <div style={{ color: "var(--color-admin-text-secondary)", whiteSpace: "pre-wrap" }}>
+                  {listing.internalNotes}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Price Change History */}
+          <div className="admin-card">
+            <div className="admin-card-header">
+              <div className="admin-card-title">
+                <TrendingUp size={16} style={{ display: "inline", marginRight: 6 }} />
+                Riwayat Perubahan Harga ({listing.priceHistory.length})
+              </div>
+            </div>
+            {listing.priceHistory.length === 0 ? (
+              <div style={{ fontSize: 13, color: "var(--color-admin-text-muted)", padding: "12px 0" }}>
+                Belum ada penyesuaian harga sejak listing dibuat.
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {listing.priceHistory.map((ph) => {
+                  const diff = ph.newPrice - ph.oldPrice;
+                  const pct = ph.oldPrice > 0 ? ((diff / ph.oldPrice) * 100).toFixed(1) : "0";
+                  const isDrop = diff < 0;
+
+                  return (
+                    <div
+                      key={ph.id}
+                      style={{
+                        padding: "10px 12px",
+                        borderRadius: 6,
+                        border: "1px solid var(--color-admin-border)",
+                        background: "var(--color-admin-bg)",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ fontWeight: 600, fontSize: 14 }}>
+                          {formatRupiah(ph.oldPrice)} → {formatRupiah(ph.newPrice)}
+                          <span
+                            style={{
+                              marginLeft: 8,
+                              fontSize: 12,
+                              fontWeight: 600,
+                              color: isDrop ? "#10b981" : "#ef4444",
+                            }}
+                          >
+                            {diff > 0 ? `+${pct}%` : `${pct}%`}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 12, color: "var(--color-admin-text-muted)" }}>
+                          {formatDate(ph.createdAt)}
+                        </div>
+                      </div>
+                      {ph.reason && (
+                        <div style={{ fontSize: 12, color: "var(--color-admin-text-secondary)", marginTop: 4 }}>
+                          Alasan: {ph.reason}
+                        </div>
+                      )}
+                      {ph.user?.name && (
+                        <div style={{ fontSize: 11, color: "var(--color-admin-text-muted)", marginTop: 2 }}>
+                          Oleh: {ph.user.name}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Status Change History */}
+          <div className="admin-card">
+            <div className="admin-card-header">
+              <div className="admin-card-title">
+                <History size={16} style={{ display: "inline", marginRight: 6 }} />
+                Riwayat Transisi Status ({listing.statusHistory.length})
+              </div>
+            </div>
+            {listing.statusHistory.length === 0 ? (
+              <div style={{ fontSize: 13, color: "var(--color-admin-text-muted)", padding: "12px 0" }}>
+                Belum ada perubahan status tercatat.
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {listing.statusHistory.map((sh) => (
+                  <div
+                    key={sh.id}
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: 6,
+                      background: "var(--color-admin-bg)",
+                      border: "1px solid var(--color-admin-border)",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>
+                        <span className={`admin-badge ${getStatusBadgeClass(sh.fromStatus || "DRAFT")}`} style={{ padding: "2px 6px", fontSize: 11 }}>
+                          {sh.fromStatus ? getStatusLabel(sh.fromStatus) : "Awal (Pembuatan)"}
+                        </span>
+                        {" → "}
+                        <span className={`admin-badge ${getStatusBadgeClass(sh.toStatus)}`} style={{ padding: "2px 6px", fontSize: 11 }}>
+                          {getStatusLabel(sh.toStatus)}
+                        </span>
+                      </div>
+                      {sh.reason && (
+                        <div style={{ fontSize: 12, color: "var(--color-admin-text-secondary)", marginTop: 4 }}>
+                          Catatan: {sh.reason}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--color-admin-text-muted)", textAlign: "right" }}>
+                      <div>{formatDate(sh.createdAt)}</div>
+                      {sh.user?.name && <div>{sh.user.name}</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Column: Property & Intermediaries */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          {/* Quick Property Summary */}
+          <div className="admin-card">
+            <div className="admin-card-header">
+              <div className="admin-card-title">
+                <Building2 size={16} style={{ display: "inline", marginRight: 6 }} />
+                Spesifikasi Properti
+              </div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13 }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "var(--color-admin-text-muted)" }}>Kode</span>
+                <Link
+                  href={`/admin/properties/${listing.property.id}`}
+                  style={{ color: "var(--color-admin-accent)", fontWeight: 600, textDecoration: "none" }}
+                >
+                  {listing.property.code} ↗
+                </Link>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "var(--color-admin-text-muted)" }}>Wilayah</span>
+                <span style={{ fontWeight: 500 }}>{listing.property.area.name}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "var(--color-admin-text-muted)" }}>Luas Tanah / Bangunan</span>
+                <span style={{ fontWeight: 500 }}>
+                  {listing.property.landArea} m² {listing.property.buildingArea ? `/ ${listing.property.buildingArea} m²` : ""}
+                </span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "var(--color-admin-text-muted)" }}>Kamar Tidur / Mandi</span>
+                <span style={{ fontWeight: 500 }}>
+                  {listing.property.bedrooms ?? "—"} KT / {listing.property.bathrooms ?? "—"} KM
+                </span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "var(--color-admin-text-muted)" }}>Sertifikat</span>
+                <span style={{ fontWeight: 500 }}>{listing.property.certificateType}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "var(--color-admin-text-muted)" }}>Alamat</span>
+                <span style={{ fontWeight: 500, maxWidth: 200, textAlign: "right" }}>{listing.property.address}</span>
+              </div>
+            </div>
+
+            {/* Photos preview */}
+            {listing.property.propertyMedia.length > 0 && (
+              <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--color-admin-border)" }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-admin-text-muted)", textTransform: "uppercase", marginBottom: 8 }}>
+                  Foto ({listing.property.propertyMedia.length})
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+                  {listing.property.propertyMedia.slice(0, 3).map((m) => (
+                    <div
+                      key={m.id}
+                      style={{
+                        position: "relative",
+                        aspectRatio: "4/3",
+                        borderRadius: 4,
+                        overflow: "hidden",
+                        backgroundColor: "#eee",
+                      }}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={m.url}
+                        alt="Property preview"
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Intermediaries Chain */}
+          <div className="admin-card">
+            <div className="admin-card-header">
+              <div className="admin-card-title">
+                <UserCheck size={16} style={{ display: "inline", marginRight: 6 }} />
+                Rantai Perantara ({listing.listingIntermediaries.length})
+              </div>
+            </div>
+            {listing.listingIntermediaries.length === 0 ? (
+              <div style={{ fontSize: 13, color: "var(--color-admin-text-muted)" }}>
+                Listing langsung (Direct Owner, tanpa mediator).
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {listing.listingIntermediaries.map((item) => (
+                  <div
+                    key={item.id}
+                    style={{
+                      padding: "10px 12px",
+                      borderRadius: 6,
+                      background: "var(--color-admin-bg)",
+                      border: "1px solid var(--color-admin-border)",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ fontWeight: 600, fontSize: 14 }}>
+                        {item.chainPosition}. {item.intermediary.name}
+                      </div>
+                      <span className="admin-badge admin-badge-draft" style={{ fontSize: 11 }}>
+                        {item.intermediary.trustLevel}
+                      </span>
+                    </div>
+                    {item.intermediary.company && (
+                      <div style={{ fontSize: 12, color: "var(--color-admin-text-secondary)", marginTop: 2 }}>
+                        {item.intermediary.company}
+                      </div>
+                    )}
+                    {item.intermediary.phone && (
+                      <div style={{ fontSize: 12, color: "var(--color-admin-accent)", marginTop: 2 }}>
+                        WA: {item.intermediary.phone}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Modal Change Status */}
+      {statusModalOpen && (
+        <div className="admin-modal-overlay" onClick={() => setStatusModalOpen(false)}>
+          <div className="admin-modal-container" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+            <div className="admin-modal-header">
+              <h3>Ubah Status Listing</h3>
+              <button
+                type="button"
+                className="admin-modal-close-btn"
+                onClick={() => setStatusModalOpen(false)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleStatusSubmit} style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+              <div className="admin-modal-body">
+                <div>
+                  <label className="admin-label">Status Baru</label>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: "var(--color-admin-accent)" }}>
+                    {getStatusLabel(selectedNewStatus)}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="admin-label">Catatan / Alasan Perubahan Status</label>
+                  <textarea
+                    className="admin-input"
+                    rows={3}
+                    placeholder="Misal: Sudah ditinjau dan dokumen lengkap, siap tayang..."
+                    value={statusReason}
+                    onChange={(e) => setStatusReason(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="admin-modal-footer">
+                <button
+                  type="button"
+                  className="admin-btn admin-btn-secondary"
+                  onClick={() => setStatusModalOpen(false)}
+                  disabled={isUpdatingStatus}
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="admin-btn admin-btn-primary"
+                  disabled={isUpdatingStatus}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+                >
+                  <Save size={16} /> {isUpdatingStatus ? "Menyimpan..." : "Konfirmasi Ubah Status"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Change Price */}
+      {priceModalOpen && (
+        <div className="admin-modal-overlay" onClick={() => setPriceModalOpen(false)}>
+          <div className="admin-modal-container" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+            <div className="admin-modal-header">
+              <h3>Ubah Harga Listing</h3>
+              <button
+                type="button"
+                className="admin-modal-close-btn"
+                onClick={() => setPriceModalOpen(false)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handlePriceSubmit} style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+              <div className="admin-modal-body">
+                <div>
+                  <label className="admin-label">Harga Penawaran Baru (Rp) <span style={{ color: "#ef4444" }}>*</span></label>
+                  <input
+                    type="number"
+                    className="admin-input"
+                    value={newAskingPrice}
+                    onChange={(e) => setNewAskingPrice(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="admin-label">Batas Harga Minimum (Rp)</label>
+                  <input
+                    type="number"
+                    className="admin-input"
+                    placeholder="Opsional (Hanya internal)"
+                    value={newMinimumPrice}
+                    onChange={(e) => setNewMinimumPrice(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="admin-label">Alasan Penyesuaian Harga</label>
+                  <input
+                    type="text"
+                    className="admin-input"
+                    placeholder="Misal: Negosiasi dari owner turun Rp 500 jt..."
+                    value={priceReason}
+                    onChange={(e) => setPriceReason(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="admin-modal-footer">
+                <button
+                  type="button"
+                  className="admin-btn admin-btn-secondary"
+                  onClick={() => setPriceModalOpen(false)}
+                  disabled={isUpdatingPrice}
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="admin-btn admin-btn-primary"
+                  disabled={isUpdatingPrice}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+                >
+                  <Save size={16} /> {isUpdatingPrice ? "Menyimpan..." : "Simpan Harga Baru"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Edit Details */}
+      {detailModalOpen && (
+        <div className="admin-modal-overlay" onClick={() => setDetailModalOpen(false)}>
+          <div className="admin-modal-container" style={{ maxWidth: 540 }} onClick={(e) => e.stopPropagation()}>
+            <div className="admin-modal-header">
+              <h3>Edit Detail & Pengaturan Listing</h3>
+              <button
+                type="button"
+                className="admin-modal-close-btn"
+                onClick={() => setDetailModalOpen(false)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleDetailsSubmit} style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+              <div className="admin-modal-body">
+                <div>
+                  <label className="admin-label">Judul Listing</label>
+                  <input
+                    type="text"
+                    className="admin-input"
+                    placeholder="Judul menarik untuk pembeli..."
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="admin-label">Deskripsi Pemasaran</label>
+                  <textarea
+                    className="admin-input"
+                    rows={4}
+                    placeholder="Tulis selling points, lingkungan, akses jalan..."
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="admin-label">Catatan Internal Admin</label>
+                  <textarea
+                    className="admin-input"
+                    rows={2}
+                    placeholder="Catatan rahasia tim..."
+                    value={internalNotes}
+                    onChange={(e) => setInternalNotes(e.target.value)}
+                  />
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 4 }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13 }}>
+                    <input
+                      type="checkbox"
+                      checked={priceOnRequest}
+                      onChange={(e) => setPriceOnRequest(e.target.checked)}
+                    />
+                    <span><strong>Price on Request:</strong> Sembunyikan harga nominal pada halaman publik.</span>
+                  </label>
+
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13 }}>
+                    <input
+                      type="checkbox"
+                      checked={showFullAddress}
+                      onChange={(e) => setShowFullAddress(e.target.checked)}
+                    />
+                    <span><strong>Tampilkan Alamat Lengkap:</strong> Munculkan jalan dan nomor rumah di portal publik.</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="admin-modal-footer">
+                <button
+                  type="button"
+                  className="admin-btn admin-btn-secondary"
+                  onClick={() => setDetailModalOpen(false)}
+                  disabled={isUpdatingDetails}
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="admin-btn admin-btn-primary"
+                  disabled={isUpdatingDetails}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+                >
+                  <Save size={16} /> {isUpdatingDetails ? "Menyimpan..." : "Simpan Perubahan"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

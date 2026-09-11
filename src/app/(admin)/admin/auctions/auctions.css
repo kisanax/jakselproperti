@@ -1,0 +1,20 @@
+.auction-module{min-width:0;max-width:100%;overflow-wrap:anywhere}
+.auction-module h1{font-size:clamp(21px,4vw,28px);font-weight:700;display:flex;align-items:center;gap:10px;margin:12px 0}
+.auction-module h2{font-size:18px;font-weight:650;display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.auction-module p{color:var(--color-admin-text-secondary);font-size:14px;line-height:1.6;margin:10px 0}
+.auction-module label{display:flex;flex-direction:column;gap:8px;min-width:0;font-size:14px}
+.auction-module label>span{display:flex;gap:6px;align-items:center}
+.auction-filters{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;margin-bottom:20px}
+.auction-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.auction-wide{grid-column:1/-1}.auction-fieldset{border:0;padding:0;margin:0;min-width:0}
+.auction-editor section{margin:20px 0}.auction-editor textarea{resize:vertical;min-height:100px}
+.auction-editor .admin-input{width:100%;min-width:0;font-size:16px}
+.auction-editor section>button{margin-top:12px}
+.auction-notice{display:block;width:100%;border:1px solid var(--color-admin-border);border-radius:10px;background:var(--color-admin-accent-light);color:var(--color-admin-text);padding:14px;text-align:left;margin:12px 0}
+.auction-badges{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}.auction-card{min-width:0;display:block}
+.auction-cover{width:100%;height:170px;object-fit:cover;border-radius:8px}
+.auction-photos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:14px 0}
+.auction-photos img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px}
+.auction-pending{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0}.auction-pending span{min-width:0;overflow-wrap:anywhere}
+.auction-save{display:flex;justify-content:flex-end;padding:16px 0}.auction-editor{padding-bottom:90px}
+@media(max-width:640px){.auction-filters,.auction-fields{grid-template-columns:minmax(0,1fr)}.auction-module .admin-page-header{align-items:stretch}.auction-save{position:fixed;bottom:calc(64px + env(safe-area-inset-bottom));left:0;right:0;padding:10px 12px;background:var(--color-admin-surface);border-top:1px solid var(--color-admin-border);z-index:40}.auction-save button{width:100%;min-height:46px}.auction-module input[type=file]{max-width:100%;font-size:14px}}
