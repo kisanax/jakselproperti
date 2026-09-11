@@ -130,7 +130,7 @@ export default function EditPropertyClient({
 
   const allPhotos = [
     ...mediaList.map((m) => ({
-      url: `/uploads/${m.filePath}`,
+      url: m.filePath.startsWith("http") ? m.filePath : `/uploads/${m.filePath}`,
       title: m.fileName,
       isPrimary: m.isPrimary,
     })),
@@ -382,7 +382,7 @@ export default function EditPropertyClient({
               listing={listing}
               media={allPhotos.map((p, idx) => ({
                 id: `preview-${idx}`,
-                filePath: p.url.replace(/^\/uploads\//, ""),
+                filePath: p.url.startsWith("http") ? p.url : p.url.replace(/^\/uploads\//, ""),
                 isPrimary: p.isPrimary,
                 altText: p.title,
               }))}
@@ -542,7 +542,7 @@ export default function EditPropertyClient({
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={`/uploads/${m.filePath}`}
+                        src={m.filePath.startsWith("http") ? m.filePath : `/uploads/${m.filePath}`}
                         alt={m.altText || m.fileName}
                         style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
                       />
@@ -972,7 +972,7 @@ export default function EditPropertyClient({
             listing={listing}
             media={allPhotos.map((p, idx) => ({
               id: `preview-${idx}`,
-              filePath: p.url.replace(/^\/uploads\//, ""),
+              filePath: p.url.startsWith("http") ? p.url : p.url.replace(/^\/uploads\//, ""),
               isPrimary: p.isPrimary,
               altText: p.title,
             }))}

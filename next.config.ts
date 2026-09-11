@@ -12,6 +12,18 @@ const nextConfig: NextConfig = {
   // hydrate (theme toggle, photo lightbox, and listing preview appear dead).
   // Addresses are detected at server startup so DHCP changes need no code edit.
   allowedDevOrigins: localDevOrigins,
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "**.r2.dev",
+      },
+      {
+        protocol: "https",
+        hostname: "jakselproperti.com",
+      },
+    ],
+  },
 };
 
 export default nextConfig;

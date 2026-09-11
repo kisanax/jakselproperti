@@ -1,5 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 
 // =============================================================================
 // Storage Abstraction Layer
@@ -7,7 +8,7 @@ import path from "path";
 // =============================================================================
 
 export interface UploadResult {
-  filePath: string; // relative path stored in DB
+  filePath: string; // relative path or full URL stored in DB
   url: string; // accessible URL
   fileName: string;
   fileSize: number;
@@ -18,6 +19,17 @@ export interface StorageProvider {
   upload(file: Buffer, fileName: string, folder: string, mimeType: string): Promise<UploadResult>;
   delete(filePath: string): Promise<void>;
   getUrl(filePath: string): string;
+}
+
+export function getMediaUrl(filePath: string): string {
+  if (!filePath) return "";
+  if (filePath.startsWith("http://") || filePath.startsWith("https://")) {
+    return filePath;
+  }
+  if (filePath.startsWith("/uploads/")) {
+    return filePath;
+  }
+  return `/uploads/${filePath}`;
 }
 
 // =============================================================================
@@ -58,7 +70,8 @@ class LocalStorage implements StorageProvider {
   }
 
   async delete(filePath: string): Promise<void> {
-    const fullPath = path.join(this.basePath, filePath);
+    const cleanPath = filePath.replace(/^\/uploads\//, "");
+    const fullPath = path.join(this.basePath, cleanPath);
     try {
       await fs.unlink(fullPath);
     } catch {
@@ -68,29 +81,100 @@ class LocalStorage implements StorageProvider {
   }
 
   getUrl(filePath: string): string {
-    return `${this.baseUrl}/${filePath}`;
+    return getMediaUrl(filePath);
   }
 }
 
 // =============================================================================
-// CLOUDFLARE R2 STORAGE (Production — placeholder)
+// CLOUDFLARE R2 STORAGE (Production)
 // =============================================================================
 
 class R2Storage implements StorageProvider {
+  private client: S3Client;
+  private bucket: string;
+  private publicUrl: string;
+
+  constructor() {
+    const accountId = process.env.R2_ACCOUNT_ID;
+    const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+    const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+    const bucket = process.env.R2_BUCKET_NAME;
+
+    if (!accountId || !accessKeyId || !secretAccessKey || !bucket) {
+      throw new Error(
+        "Missing Cloudflare R2 environment variables (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME)"
+      );
+    }
+
+    this.bucket = bucket;
+    this.publicUrl = (process.env.R2_PUBLIC_URL || "").replace(/\/$/, "");
+
+    this.client = new S3Client({
+      region: "auto",
+      endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+      credentials: {
+        accessKeyId,
+        secretAccessKey,
+      },
+    });
+  }
+
   async upload(file: Buffer, fileName: string, folder: string, mimeType: string): Promise<UploadResult> {
-    // TODO: Implement R2 upload using S3-compatible API
-    // @aws-sdk/client-s3 with R2 endpoint
-    throw new Error("R2 storage not yet implemented. Set STORAGE_PROVIDER=local for development.");
+    const timestamp = Date.now();
+    const ext = path.extname(fileName);
+    const baseName = path.basename(fileName, ext).replace(/[^a-zA-Z0-9-_]/g, "_");
+    const uniqueName = `${baseName}-${timestamp}${ext}`;
+    const cleanFolder = folder.replace(/^\/|\/$/g, "");
+    const key = cleanFolder ? `${cleanFolder}/${uniqueName}` : uniqueName;
+
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: file,
+        ContentType: mimeType,
+      })
+    );
+
+    const url = this.publicUrl ? `${this.publicUrl}/${key}` : `/${key}`;
+
+    return {
+      filePath: url,
+      url,
+      fileName: uniqueName,
+      fileSize: file.length,
+      mimeType,
+    };
   }
 
   async delete(filePath: string): Promise<void> {
-    // TODO: Implement R2 delete
-    throw new Error("R2 storage not yet implemented.");
+    let key = filePath;
+    if (key.startsWith("http://") || key.startsWith("https://")) {
+      try {
+        const parsed = new URL(key);
+        key = parsed.pathname;
+      } catch {
+        if (this.publicUrl && key.startsWith(this.publicUrl)) {
+          key = key.slice(this.publicUrl.length);
+        }
+      }
+    }
+    key = key.replace(/^\//, "");
+
+    try {
+      await this.client.send(
+        new DeleteObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+        })
+      );
+    } catch (err) {
+      console.warn(`R2 delete failed for key ${key}:`, err);
+    }
   }
 
   getUrl(filePath: string): string {
-    const publicUrl = process.env.R2_PUBLIC_URL || "";
-    return `${publicUrl}/${filePath}`;
+    return getMediaUrl(filePath);
   }
 }
 
@@ -104,7 +188,7 @@ export function getStorage(): StorageProvider {
   if (!storageInstance) {
     const provider = process.env.STORAGE_PROVIDER || "local";
 
-    switch (provider) {
+    switch (provider.toLowerCase()) {
       case "r2":
         storageInstance = new R2Storage();
         break;

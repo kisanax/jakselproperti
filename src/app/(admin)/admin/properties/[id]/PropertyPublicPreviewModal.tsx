@@ -491,7 +491,7 @@ export default function PropertyPublicPreviewModal({
                 <>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={`/uploads/${sortedMedia[currentSlide].filePath}`}
+                    src={sortedMedia[currentSlide].filePath.startsWith("http") ? sortedMedia[currentSlide].filePath : `/uploads/${sortedMedia[currentSlide].filePath}`}
                     alt={sortedMedia[currentSlide].altText || `Foto ${currentSlide + 1}`}
                     style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
                   />
