@@ -14,6 +14,19 @@ datasource db {
 }
 
 // =============================================================================
+// SEQUENCE COUNTERS (untuk penomoran publik Property & Listing)
+// =============================================================================
+
+/// Counter independen untuk penomoran publik.
+/// Increment dilakukan secara atomic via row lock dalam transaksi.
+model SequenceCounter {
+  name         String @id @db.VarChar(50)
+  currentValue BigInt @default(0) @map("current_value")
+
+  @@map("sequence_counters")
+}
+
+// =============================================================================
 // ENUMS
 // =============================================================================
 
@@ -38,12 +51,12 @@ enum ListingStatus {
 }
 
 enum CertificateType {
-  SHM    // Sertifikat Hak Milik
-  SHGB   // Sertifikat Hak Guna Bangunan
-  SHSRS  // Sertifikat Hak Satuan Rumah Susun
-  AJB    // Akta Jual Beli
-  GIRIK  // Girik/Letter C
-  PPJB   // Perjanjian Pengikatan Jual Beli
+  SHM // Sertifikat Hak Milik
+  SHGB // Sertifikat Hak Guna Bangunan
+  SHSRS // Sertifikat Hak Satuan Rumah Susun
+  AJB // Akta Jual Beli
+  GIRIK // Girik/Letter C
+  PPJB // Perjanjian Pengikatan Jual Beli
   OTHER
 }
 
@@ -70,12 +83,12 @@ enum DocumentStatus {
 }
 
 enum LeadStage {
-  NEW           // Baru
-  QUALIFIED     // Kualifikasi
-  VIEWING       // Survei
-  NEGOTIATING   // Negosiasi
-  WON           // Closing - Menang
-  LOST          // Closing - Hilang
+  NEW // Baru
+  QUALIFIED // Kualifikasi
+  VIEWING // Survei
+  NEGOTIATING // Negosiasi
+  WON // Closing - Menang
+  LOST // Closing - Hilang
 }
 
 enum LeadSource {
@@ -125,27 +138,158 @@ enum AuditAction {
   LOGOUT
 }
 
+enum PlatformRole {
+  MEMBER
+  SUPER_ADMIN
+  SUPPORT
+  BROKER
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  WHATSAPP
+}
+
+enum BrokerType {
+  INDEPENDENT
+  AGENCY_OWNER
+  AGENCY_MEMBER
+}
+
+enum BrokerVerificationStatus {
+  PROFILE_INCOMPLETE
+  PENDING_REVIEW
+  REVISION_REQUIRED
+  VERIFIED
+  REJECTED
+  SUSPENDED
+}
+
 // =============================================================================
 // ACCESS & AUTH
 // =============================================================================
 
-/// Admin internal — membuat/update listing, mengelola semua data
+/// Identitas platform. Organisasi, cabang, dan role organisasi ditautkan
+/// melalui membership pada fase berikutnya, bukan langsung pada tabel user.
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  name      String
-  password  String   // hashed — auth implementation nanti
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String       @id @default(uuid())
+  email         String?      @unique
+  emailVerified DateTime?
+  name          String?
+  image         String?      @db.VarChar(1000)
+  password      String? // null untuk akun OAuth
+  platformRole  PlatformRole @default(MEMBER)
+  isActive      Boolean      @default(true)
+  deletedAt     DateTime? // soft delete — tetap tersimpan untuk audit, tidak bisa login
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 
   // Relations
-  auditLogs            AuditLog[]
-  listingStatusChanges ListingStatusHistory[]
-  priceChanges         PriceHistory[]
-  leadActivities       LeadActivity[]
+  accounts               Account[]
+  sessions               Session[]
+  brokerProfile          BrokerProfile?
+  auditLogs              AuditLog[]
+  notificationPreferences NotificationPreference[]
+  listingStatusChanges   ListingStatusHistory[]
+  priceChanges           PriceHistory[]
+  leadActivities         LeadActivity[]
+  managedListings        Listing[] @relation("ListingManagedBy")
 
   @@map("users")
+}
+
+model Account {
+  id                String  @id @default(uuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model BrokerProfile {
+  id                    String                   @id @default(uuid())
+  userId                String                   @unique
+  brokerType            BrokerType?
+  phone                 String?                  @db.VarChar(40)
+  city                  String?                  @db.VarChar(120)
+  province              String?                  @db.VarChar(120)
+  licenseNumber         String?                  @db.VarChar(120)
+  bio                   String?                  @db.Text
+  verificationStatus    BrokerVerificationStatus @default(PROFILE_INCOMPLETE)
+  onboardingCompletedAt DateTime?
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([verificationStatus])
+  @@index([city, province])
+  @@map("broker_profiles")
+}
+
+/// Konfigurasi modul mana yang aktif per role — diedit SUPER_ADMIN
+/// lewat halaman Konfigurasi Akses. Fallback ke default di lib/module-access.ts
+/// bila baris belum ada (misal sebelum seed).
+model RoleModuleAccess {
+  id        String       @id @default(uuid())
+  role      PlatformRole
+  moduleKey String       @db.VarChar(50)
+  enabled   Boolean      @default(false)
+  updatedAt DateTime     @updatedAt
+
+  @@unique([role, moduleKey])
+  @@map("role_module_access")
+}
+
+/// Preferensi notifikasi per user, per event, per channel.
+/// Absennya baris = memakai default dari katalog event (lib/notifications.ts).
+model NotificationPreference {
+  id      String             @id @default(uuid())
+  userId  String
+  eventKey String            @db.VarChar(50)
+  channel NotificationChannel @default(IN_APP)
+  enabled Boolean            @default(true)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventKey, channel])
+  @@index([userId])
+  @@map("notification_preferences")
 }
 
 /// Log aktivitas admin — setiap aksi penting dicatat
@@ -153,9 +297,9 @@ model AuditLog {
   id         String      @id @default(uuid())
   userId     String
   action     AuditAction
-  entityType String      // e.g. "property", "listing", "owner"
+  entityType String // e.g. "property", "listing", "owner"
   entityId   String
-  details    Json?       // snapshot perubahan
+  details    Json? // snapshot perubahan
   ipAddress  String?
   createdAt  DateTime    @default(now())
 
@@ -172,24 +316,31 @@ model AuditLog {
 // AREA & KAWASAN (STRUKTUR 2-LAYER — Section 15.3)
 // =============================================================================
 
-/// 10 Kecamatan resmi Jakarta Selatan (data administratif & pelaporan)
+/// Wilayah administratif nasional (hierarki Kemendagri 4 level).
+/// Data katalog statis 91 ribu baris — primary key Int autoincrement
+/// (bukan UUID) demi ukuran tabel & index yang ramping.
+/// Data Jaksel dikurasi seed; data nasional via importer wilayah.
 model Area {
-  id        String   @id @default(uuid())
-  name      String   // e.g. "Kebayoran Baru", "Cilandak", "Mampang Prapatan"
-  slug      String   @unique
-  parentId  String?  // null = kecamatan, filled = kelurahan (hierarki administratif)
-  level     Int      @default(1) // 1 = kecamatan, 2 = kelurahan
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           Int      @id @default(autoincrement())
+  name         String // e.g. "Kebayoran Baru", "Kota Administrasi Jakarta Selatan"
+  slug         String   @unique
+  code         String?  @unique // LEGACY kode singkatan huruf — tidak dipakai untuk kode properti lagi
+  officialCode String?  @unique @db.VarChar(13) // kode wilayah Kemendagri, e.g. "31.74.01"
+  parentId     Int? // null = provinsi (level 1); kecamatan → kab/kota; kelurahan → kecamatan
+  level        Int      @default(3) // 1 = provinsi, 2 = kab/kota, 3 = kecamatan, 4 = kelurahan/desa
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   // Relations
   parent     Area?      @relation("AreaHierarchy", fields: [parentId], references: [id])
   children   Area[]     @relation("AreaHierarchy")
   kawasan    Kawasan[]
-  properties Property[]
+  properties Property[] @relation("PropertyKecamatan")
+  villageProperties Property[] @relation("PropertyVillage")
 
   @@index([parentId])
+  @@index([level])
   @@index([slug])
   @@map("areas")
 }
@@ -199,11 +350,12 @@ model Area {
 /// Ditampilkan sebagai banner promosi di homepage ("Kawasan Pilihan") & landing page SEO
 model Kawasan {
   id          String   @id @default(uuid())
-  name        String   // e.g. "Kemang", "Senopati", "Pondok Indah"
+  name        String // e.g. "Kemang", "Senopati", "Pondok Indah"
   slug        String   @unique
-  areaId      String   // Terhubung ke salah satu dari 10 kecamatan resmi
-  tagline     String?  // Tagline banner promo homepage
-  bannerImage String?  // URL/path foto banner kawasan
+  code        String?  @unique // kode 3 huruf untuk kode properti (e.g. "KMG", "PDI")
+  areaId      Int      // Terhubung ke kecamatan (level 3) induk kawasan
+  tagline     String? // Tagline banner promo homepage
+  bannerImage String? // URL/path foto banner kawasan
   isFeatured  Boolean  @default(false) // Toggle tampil di banner homepage
   sortOrder   Int      @default(0)
   isActive    Boolean  @default(true)
@@ -230,7 +382,7 @@ model Owner {
   name      String
   phone     String?
   email     String?
-  idNumber  String?  // KTP/passport — encrypted at rest nanti
+  idNumber  String? // KTP/passport — encrypted at rest nanti
   address   String?  @db.Text
   notes     String?  @db.Text
   createdAt DateTime @default(now())
@@ -246,15 +398,15 @@ model Owner {
 
 /// Perantara/broker — pembawa info properti ke tim dengan Trust Level (Section 5 & 15.1)
 model Intermediary {
-  id         String      @id @default(uuid())
+  id         String     @id @default(uuid())
   name       String
   phone      String?
   email      String?
-  company    String?     // nama kantor broker jika ada
-  trustLevel TrustLevel  @default(NEW)
-  notes      String?     @db.Text
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+  company    String? // nama kantor broker jika ada
+  trustLevel TrustLevel @default(NEW)
+  notes      String?    @db.Text
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
 
   // Relations
   listingIntermediaries ListingIntermediary[]
@@ -272,53 +424,57 @@ model Intermediary {
 /// Properti — aset fisik yang tidak berubah karena status pemasaran
 /// Satu properti bisa punya beberapa riwayat listing (Section 6)
 model Property {
-  id              String       @id @default(uuid())
-  code            String       @unique // e.g. "JS-0001" — auto-generated
-  type            PropertyType
-  areaId          String       // Kecamatan resmi (administratif)
-  kawasanId       String?      // Kawasan populer / branded (opsional marketing)
+  id             String       @id @default(uuid())
+  code           String       @unique // kode properti numerik: {kode Kemendagri kecamatan}-{running}, cth. "317407-0001"
+  propertyNumber String?      @unique @map("property_number") @db.VarChar(20) // Nomor publik "100001-7"
+  type      PropertyType
+  areaId    Int      // Kecamatan (level 3) — administratif
+  villageId Int?     // Kelurahan/desa (level 4) — opsional, harus anak dari areaId
+  kawasanId String? // Kawasan populer / branded (opsional marketing)
 
   // Lokasi (internal)
-  address         String       @db.Text // alamat lengkap — internal only
-  latitude        Decimal?     @db.Decimal(10, 8)
-  longitude       Decimal?     @db.Decimal(11, 8)
+  address   String   @db.Text // alamat lengkap — internal only
+  latitude  Decimal? @db.Decimal(10, 8)
+  longitude Decimal? @db.Decimal(11, 8)
 
   // Spesifikasi
-  landArea        Int?         // m²
-  buildingArea    Int?         // m²
-  bedrooms        Int?
-  bathrooms       Int?
-  floors          Int?         @default(1)
-  garages         Int?         @default(0)
-  carports        Int?         @default(0)
+  landArea     Int? // m²
+  buildingArea Int? // m²
+  bedrooms     Int?
+  bathrooms    Int?
+  floors       Int? @default(1)
+  garages      Int? @default(0)
+  carports     Int? @default(0)
 
   // Sertifikat
   certificateType CertificateType?
-  certificateNo   String?      // internal only
+  certificateNo   String? // internal only
 
   // Bangunan
-  yearBuilt       Int?
-  facing          String?      // Utara, Selatan, dll
-  electricity     Int?         // watt
-  waterSource     String?      // PAM, sumur, dll
+  yearBuilt   Int?
+  facing      String? // Utara, Selatan, dll
+  electricity Int? // watt
+  waterSource String? // PAM, sumur, dll
 
   // Internal
-  internalNotes   String?      @db.Text
+  internalNotes String? @db.Text
 
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  area            Area              @relation(fields: [areaId], references: [id])
-  kawasan         Kawasan?          @relation(fields: [kawasanId], references: [id])
-  listings        Listing[]
-  propertyOwners  PropertyOwner[]
-  propertyMedia   PropertyMedia[]
-  documents       Document[]
-  auctionRecords  AuctionRecord[]
-  amenities       PropertyAmenity[]
+  area           Area              @relation("PropertyKecamatan", fields: [areaId], references: [id])
+  village        Area?             @relation("PropertyVillage", fields: [villageId], references: [id])
+  kawasan        Kawasan?          @relation(fields: [kawasanId], references: [id])
+  listings       Listing[]
+  propertyOwners PropertyOwner[]
+  propertyMedia  PropertyMedia[]
+  documents      Document[]
+  auctionRecords AuctionRecord[]
+  amenities      PropertyAmenity[]
 
   @@index([areaId])
+  @@index([villageId])
   @@index([kawasanId])
   @@index([type])
   @@index([code])
@@ -328,36 +484,36 @@ model Property {
 // Flexible internal intake for Jabodetabek; optional link to the verified asset.
 // Each record represents one marketing/auction period, including repeat auctions.
 model AuctionRecord {
-  id              String @id @default(uuid())
+  id              String    @id @default(uuid())
   propertyId      String?
   property        Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
-  title           String @db.VarChar(255)
-  category        String @default("AUCTION") @db.VarChar(32)
-  propertyType    String @default("HOUSE") @db.VarChar(32)
-  city            String? @db.VarChar(120)
-  district        String? @db.VarChar(120)
-  address         String? @db.Text
-  description     String? @db.Text
-  specifications  String? @db.Text
-  limitPrice      Decimal? @db.Decimal(15, 0)
-  depositAmount   Decimal? @db.Decimal(15, 0)
-  seller          String? @db.VarChar(255)
-  organizer       String? @db.VarChar(255)
-  contactName     String? @db.VarChar(255)
-  contactPhone    String? @db.VarChar(80)
-  sourceUrl       String? @db.VarChar(1000)
-  sourceText      String? @db.Text
-  termsNotes      String? @db.Text
-  status          String @default("DRAFT") @db.VarChar(32)
+  title           String    @db.VarChar(255)
+  category        String    @default("AUCTION") @db.VarChar(32)
+  propertyType    String    @default("HOUSE") @db.VarChar(32)
+  city            String?   @db.VarChar(120)
+  district        String?   @db.VarChar(120)
+  address         String?   @db.Text
+  description     String?   @db.Text
+  specifications  String?   @db.Text
+  limitPrice      Decimal?  @db.Decimal(15, 0)
+  depositAmount   Decimal?  @db.Decimal(15, 0)
+  seller          String?   @db.VarChar(255)
+  organizer       String?   @db.VarChar(255)
+  contactName     String?   @db.VarChar(255)
+  contactPhone    String?   @db.VarChar(80)
+  sourceUrl       String?   @db.VarChar(1000)
+  sourceText      String?   @db.Text
+  termsNotes      String?   @db.Text
+  status          String    @default("DRAFT") @db.VarChar(32)
   activeFrom      DateTime? @db.Date
   durationMonths  Int?
   activeUntil     DateTime? @db.Date
   auctionAt       DateTime?
   depositDeadline DateTime?
-  resultNotes     String? @db.Text
+  resultNotes     String?   @db.Text
   photos          Json?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([propertyId])
   @@index([status, activeUntil])
@@ -391,21 +547,26 @@ model PropertyOwner {
 /// Listing — satu periode/penawaran penjualan properti
 /// Satu properti bisa punya beberapa listing di waktu berbeda (Section 6)
 model Listing {
-  id               String        @id @default(uuid())
-  propertyId       String
-  status           ListingStatus @default(DRAFT)
+  id            String        @id @default(uuid())
+  propertyId    String
+  listingNumber String?       @unique @map("listing_number") @db.VarChar(20) // Nomor publik "500001-4"
+  /// Pemilik/pengelola listing — dipakai scope data broker (Fase 2:
+  /// broker hanya melihat listing yang dia kelola). Diisi otomatis dari
+  /// user yang membuat listing; nullable untuk data warisan.
+  managedById   String?
+  status        ListingStatus @default(DRAFT)
 
   // Harga
-  askingPrice      Decimal       @db.Decimal(15, 0) // Rp — harga yang ditawarkan
-  minimumPrice     Decimal?      @db.Decimal(15, 0) // Rp — harga minimum owner (internal)
-  priceOnRequest   Boolean       @default(false)    // sembunyikan harga dari publik
+  askingPrice    Decimal  @db.Decimal(15, 0) // Rp — harga yang ditawarkan
+  minimumPrice   Decimal? @db.Decimal(15, 0) // Rp — harga minimum owner (internal)
+  priceOnRequest Boolean  @default(false) // sembunyikan harga dari publik
 
   // Konten publik
-  title            String?       @db.VarChar(255)
-  description      String?       @db.Text // deskripsi publik
-  showFullAddress  Boolean       @default(false) // per-listing basis (Section 15.1 #8)
-  videoUrl         String?       @db.VarChar(500) // URL YouTube / Instagram Reels / TikTok tour
-  videoPlatform    String?       @db.VarChar(50)  // YOUTUBE, INSTAGRAM, TIKTOK, OTHER
+  title           String? @db.VarChar(255)
+  description     String? @db.Text // deskripsi publik
+  showFullAddress Boolean @default(false) // per-listing basis (Section 15.1 #8)
+  videoUrl        String? @db.VarChar(500) // URL YouTube / Instagram Reels / TikTok tour
+  videoPlatform   String? @db.VarChar(50) // YOUTUBE, INSTAGRAM, TIKTOK, OTHER
 
   // Konsinyasi
   consignmentStartDate DateTime?
@@ -413,15 +574,16 @@ model Listing {
   consignmentNotes     String?   @db.Text
 
   // Internal
-  internalNotes    String?       @db.Text
-  publishedAt      DateTime?
-  archivedAt       DateTime?
+  internalNotes String?   @db.Text
+  publishedAt   DateTime?
+  archivedAt    DateTime?
 
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
   property              Property               @relation(fields: [propertyId], references: [id])
+  managedBy             User?                  @relation("ListingManagedBy", fields: [managedById], references: [id])
   listingIntermediaries ListingIntermediary[]
   listingSources        ListingSource[]
   statusHistory         ListingStatusHistory[]
@@ -431,6 +593,7 @@ model Listing {
   offers                Offer[]
 
   @@index([propertyId])
+  @@index([managedById])
   @@index([status])
   @@index([askingPrice])
   @@index([createdAt])
@@ -445,7 +608,7 @@ model ListingIntermediary {
   intermediaryId  String
   role            IntermediaryRole @default(PRIMARY_SOURCE)
   chainPosition   Int              @default(1) // posisi dalam rantai perantara
-  commissionNotes String?          @db.Text   // catatan komisi (MVP: belum breakdown)
+  commissionNotes String?          @db.Text // catatan komisi (MVP: belum breakdown)
   notes           String?          @db.Text
   createdAt       DateTime         @default(now())
 
@@ -460,13 +623,13 @@ model ListingIntermediary {
 
 /// Rantai sumber informasi properti (Section 5)
 model ListingSource {
-  id          String   @id @default(uuid())
-  listingId   String
-  sourceName  String   // nama sumber (bisa owner langsung atau perantara)
-  sourceType  String   // "owner", "intermediary"
-  sourceId    String?  // reference ke owners/intermediaries ID
-  receivedAt  DateTime @default(now())
-  notes       String?  @db.Text
+  id         String   @id @default(uuid())
+  listingId  String
+  sourceName String // nama sumber (bisa owner langsung atau perantara)
+  sourceType String // "owner", "intermediary"
+  sourceId   String? // reference ke owners/intermediaries ID
+  receivedAt DateTime @default(now())
+  notes      String?  @db.Text
 
   // Relations
   listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
@@ -484,8 +647,8 @@ model Amenity {
   id        String   @id @default(uuid())
   name      String   @unique // e.g. "Kolam Renang", "Garasi", "Taman"
   slug      String   @unique
-  icon      String?  // lucide icon name
-  category  String?  // grouping: "Outdoor", "Interior", "Security", dll
+  icon      String? // lucide icon name
+  category  String? // grouping: "Outdoor", "Interior", "Security", dll
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 
@@ -517,37 +680,37 @@ model PropertyAmenity {
 /// Foto, video, denah properti
 /// Database hanya menyimpan metadata & path relatif — file di Cloudflare R2
 model PropertyMedia {
-  id          String    @id @default(uuid())
-  propertyId  String
-  type        MediaType @default(PHOTO)
+  id         String    @id @default(uuid())
+  propertyId String
+  type       MediaType @default(PHOTO)
 
   // File info (relative path di R2)
-  fileName    String
-  filePath    String    // relative path di storage (e.g. "properties/JS-0001/photo-1.webp")
-  fileSize    Int       // bytes
-  mimeType    String
-  width       Int?      // pixels
-  height      Int?      // pixels
-  fileHash    String?   // hash untuk deteksi duplikat foto
+  fileName String
+  filePath String // relative path di storage (e.g. "properties/317407-0001/photo-1.webp")
+  fileSize Int // bytes
+  mimeType String
+  width    Int? // pixels
+  height   Int? // pixels
+  fileHash String? // hash untuk deteksi duplikat foto
 
   // Thumbnails & variants
   thumbnailPath String? // path ke thumbnail
   webpPath      String? // path ke WebP version
   externalUrl   String? @db.VarChar(500) // URL embed eksternal jika ada (YouTube/Reels)
-  duration      Int?    // Durasi video dalam detik (jika tipe VIDEO)
+  duration      Int? // Durasi video dalam detik (jika tipe VIDEO)
 
   // Display
-  sortOrder   Int       @default(0) // urutan galeri
-  isPrimary   Boolean   @default(false) // foto utama
-  isPublic    Boolean   @default(true)  // tampil di publik
-  altText     String?   // SEO alt text
-  caption     String?
+  sortOrder Int     @default(0) // urutan galeri
+  isPrimary Boolean @default(false) // foto utama
+  isPublic  Boolean @default(true) // tampil di publik
+  altText   String? // SEO alt text
+  caption   String?
 
   // Watermark (opsional per foto — Section 15.1 #9)
-  hasWatermark Boolean  @default(false)
+  hasWatermark Boolean @default(false)
 
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
@@ -561,14 +724,14 @@ model PropertyMedia {
 /// Referensi dokumen legal (Section 14)
 /// MVP: hanya catat status/referensi, bukan file fisik (Section 15.1 #4)
 model Document {
-  id           String         @id @default(uuid())
-  propertyId   String
-  type         DocumentType
-  status       DocumentStatus @default(NOT_AVAILABLE)
-  referenceNo  String?        // nomor dokumen jika ada
-  notes        String?        @db.Text
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  id          String         @id @default(uuid())
+  propertyId  String
+  type        DocumentType
+  status      DocumentStatus @default(NOT_AVAILABLE)
+  referenceNo String? // nomor dokumen jika ada
+  notes       String?        @db.Text
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
 
   // Relations
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
@@ -584,13 +747,13 @@ model Document {
 
 /// Riwayat perubahan status listing (Section 8)
 model ListingStatusHistory {
-  id         String        @id @default(uuid())
+  id         String         @id @default(uuid())
   listingId  String
   fromStatus ListingStatus?
   toStatus   ListingStatus
-  changedBy  String        // userId
-  reason     String?       @db.Text
-  createdAt  DateTime      @default(now())
+  changedBy  String // userId
+  reason     String?        @db.Text
+  createdAt  DateTime       @default(now())
 
   // Relations
   listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
@@ -607,7 +770,7 @@ model PriceHistory {
   listingId String
   oldPrice  Decimal  @db.Decimal(15, 0)
   newPrice  Decimal  @db.Decimal(15, 0)
-  changedBy String   // userId
+  changedBy String // userId
   reason    String?  @db.Text
   createdAt DateTime @default(now())
 
@@ -652,14 +815,14 @@ model Lead {
   source       LeadSource @default(WEBSITE)
 
   // Pesan inquiry
-  message      String?    @db.Text
+  message String? @db.Text
 
   // Internal
-  notes        String?    @db.Text
-  priority     Int        @default(0) // 0 = normal, 1 = high, 2 = urgent
+  notes    String? @db.Text
+  priority Int     @default(0) // 0 = normal, 1 = high, 2 = urgent
 
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
   customer         Customer          @relation(fields: [customerId], references: [id])
@@ -679,10 +842,10 @@ model Lead {
 model LeadActivity {
   id        String     @id @default(uuid())
   leadId    String
-  userId    String     // admin yang update
+  userId    String // admin yang update
   fromStage LeadStage?
   toStage   LeadStage?
-  type      String     // "STAGE_CHANGE", "CALL", "WHATSAPP", "NOTE", "MEETING"
+  type      String // "STAGE_CHANGE", "CALL", "WHATSAPP", "NOTE", "MEETING"
   summary   String?    @db.Text
   createdAt DateTime   @default(now())
 
@@ -704,7 +867,7 @@ model ViewingSchedule {
   status      ViewingStatus @default(SCHEDULED)
   scheduledAt DateTime
   duration    Int?          @default(60) // menit
-  location    String?       // bisa beda dari alamat properti
+  location    String? // bisa beda dari alamat properti
   notes       String?       @db.Text
   feedback    String?       @db.Text // hasil survei
   createdAt   DateTime      @default(now())
@@ -729,8 +892,8 @@ model Offer {
   amount        Decimal     @db.Decimal(15, 0) // Rp
   counterAmount Decimal?    @db.Decimal(15, 0) // counter-offer dari owner
   notes         String?     @db.Text
-  validUntil    DateTime?   // berlaku sampai
-  respondedAt   DateTime?   // waktu respons
+  validUntil    DateTime? // berlaku sampai
+  respondedAt   DateTime? // waktu respons
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 

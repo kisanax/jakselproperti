@@ -4,21 +4,11 @@ import PropertyForm from "./PropertyForm";
 export const dynamic = "force-dynamic";
 
 // =============================================================================
-// Server component: fetch areas, amenities & kawasan for the form
+// Server component: fetch amenities & kawasan for the form
 // =============================================================================
 
 async function getFormData() {
-  const [areas, amenities, kawasan] = await Promise.all([
-    prisma.area.findMany({
-      where: { isActive: true },
-      orderBy: { name: "asc" },
-      include: {
-        children: {
-          where: { isActive: true },
-          orderBy: { name: "asc" },
-        },
-      },
-    }),
+  const [amenities, kawasan] = await Promise.all([
     prisma.amenity.findMany({
       where: { isActive: true },
       orderBy: [{ category: "asc" }, { name: "asc" }],
@@ -28,24 +18,6 @@ async function getFormData() {
       select: { id: true, name: true, slug: true, areaId: true },
       orderBy: { name: "asc" },
     }),
-  ]);
-
-  // Flatten areas for autocomplete (kecamatan + kelurahan)
-  const flatAreas = areas.flatMap((kecamatan) => [
-    {
-      id: kecamatan.id,
-      name: kecamatan.name,
-      slug: kecamatan.slug,
-      level: kecamatan.level,
-      parentName: null as string | null,
-    },
-    ...kecamatan.children.map((kelurahan) => ({
-      id: kelurahan.id,
-      name: kelurahan.name,
-      slug: kelurahan.slug,
-      level: kelurahan.level,
-      parentName: kecamatan.name,
-    })),
   ]);
 
   // Group amenities by category
@@ -64,16 +36,15 @@ async function getFormData() {
     {} as Record<string, { id: string; name: string; slug: string; icon: string | null }[]>
   );
 
-  return { flatAreas, amenitiesByCategory, kawasan };
+  return { amenitiesByCategory, kawasan };
 }
 
 export default async function NewPropertyPage() {
-  const { flatAreas, amenitiesByCategory, kawasan } = await getFormData();
+  const { amenitiesByCategory, kawasan } = await getFormData();
 
   return (
     <div className="animate-fade-in" style={{ maxWidth: 680, margin: "0 auto" }}>
       <PropertyForm
-        areas={flatAreas}
         amenitiesByCategory={amenitiesByCategory}
         kawasan={kawasan}
       />

@@ -1,22 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { ListingStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-
-// =============================================================================
-// Valid status transitions (Section 8)
-// =============================================================================
-
-const VALID_TRANSITIONS: Record<string, string[]> = {
-  DRAFT: ["PENDING_VERIFICATION"],
-  PENDING_VERIFICATION: ["READY_TO_PUBLISH", "DRAFT"],
-  READY_TO_PUBLISH: ["ACTIVE", "DRAFT"],
-  ACTIVE: ["IN_NEGOTIATION", "SUSPENDED", "WITHDRAWN", "EXPIRED"],
-  IN_NEGOTIATION: ["SOLD", "ACTIVE", "SUSPENDED"],
-  SOLD: ["ARCHIVED"],
-  SUSPENDED: ["ACTIVE", "WITHDRAWN", "ARCHIVED"],
-  WITHDRAWN: ["ARCHIVED", "DRAFT"],
-  EXPIRED: ["ARCHIVED", "DRAFT"],
-  ARCHIVED: [],
-};
+import { requireOperationalUser } from "@/lib/api-auth";
+import {
+  allowedListingTransitions,
+  canTransitionListing,
+  combineListingFilters,
+  requiresPublishCompleteness,
+  validatePublishCompleteness,
+  VALID_LISTING_TRANSITIONS,
+} from "@/lib/services/property-listing-access";
 
 // =============================================================================
 // GET /api/listings/[id] — Get listing detail
@@ -26,10 +19,13 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const guard = await requireOperationalUser();
+  if (guard.error) return guard.error;
+
   const { id } = await params;
 
-  const listing = await prisma.listing.findUnique({
-    where: { id },
+  const listing = await prisma.listing.findFirst({
+    where: combineListingFilters(guard.actor, { id }),
     include: {
       property: {
         include: {
@@ -63,7 +59,10 @@ export async function GET(
     return NextResponse.json({ error: "Listing tidak ditemukan" }, { status: 404 });
   }
 
-  return NextResponse.json({ listing, validTransitions: VALID_TRANSITIONS[listing.status] || [] });
+  return NextResponse.json({
+    listing,
+    validTransitions: allowedListingTransitions(guard.actor, listing.status),
+  });
 }
 
 // =============================================================================
@@ -74,83 +73,132 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const guard = await requireOperationalUser();
+  if (guard.error) return guard.error;
+
   const { id } = await params;
 
   try {
     const body = await request.json();
 
-    const existing = await prisma.listing.findUnique({ where: { id } });
+    const existing = await prisma.listing.findFirst({
+      where: combineListingFilters(guard.actor, { id }),
+      include: {
+        property: {
+          select: {
+            _count: { select: { propertyOwners: true } },
+            propertyMedia: {
+              where: { type: "PHOTO", isPrimary: true },
+              select: { id: true },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
     if (!existing) {
       return NextResponse.json({ error: "Listing tidak ditemukan" }, { status: 404 });
     }
 
-    const admin = await prisma.user.findFirst({
-      where: { email: "admin@jakselproperti.com" },
-    });
-
     // Handle status change
-    if (body.status && body.status !== existing.status) {
-      const allowed = VALID_TRANSITIONS[existing.status] || [];
-      if (!allowed.includes(body.status)) {
+    let nextStatus: ListingStatus | undefined;
+    let publishedAt: Date | undefined;
+    let archivedAt: Date | undefined;
+    if (body.status !== undefined) {
+      if (typeof body.status !== "string" || !(body.status in VALID_LISTING_TRANSITIONS)) {
+        return NextResponse.json({ error: "Status listing tidak valid" }, { status: 400 });
+      }
+      nextStatus = body.status as ListingStatus;
+    }
+
+    if (nextStatus && nextStatus !== existing.status) {
+      if (!canTransitionListing(guard.actor, existing.status, nextStatus)) {
         return NextResponse.json(
           {
-            error: `Tidak bisa mengubah status dari ${existing.status} ke ${body.status}`,
+            error: `Tidak bisa mengubah status dari ${existing.status} ke ${nextStatus}`,
           },
           { status: 400 }
         );
       }
 
-      // Log status change
-      if (admin) {
-        await prisma.listingStatusHistory.create({
+      if (requiresPublishCompleteness(nextStatus)) {
+        const completenessErrors = validatePublishCompleteness({
+          ownerCount: existing.property._count.propertyOwners,
+          hasPrimaryPhoto: existing.property.propertyMedia.length > 0,
+          title: body.title !== undefined ? body.title : existing.title,
+          description:
+            body.description !== undefined ? body.description : existing.description,
+          askingPrice:
+            body.askingPrice !== undefined
+              ? Number(body.askingPrice)
+              : Number(existing.askingPrice),
+          priceOnRequest:
+            body.priceOnRequest !== undefined
+              ? Boolean(body.priceOnRequest)
+              : existing.priceOnRequest,
+        });
+        if (completenessErrors.length > 0) {
+          return NextResponse.json(
+            { error: "Listing belum lengkap untuk dipublikasikan", details: completenessErrors },
+            { status: 400 }
+          );
+        }
+      }
+
+      // Set publishedAt when going active
+      if (nextStatus === "ACTIVE" && !existing.publishedAt) {
+        publishedAt = new Date();
+      }
+      if (nextStatus === "ARCHIVED") {
+        archivedAt = new Date();
+      }
+    }
+
+    // Handle price change
+    const priceChanged =
+      body.askingPrice !== undefined &&
+      Number(body.askingPrice) !== Number(existing.askingPrice);
+
+    const listing = await prisma.$transaction(async (tx) => {
+      if (nextStatus && nextStatus !== existing.status) {
+        await tx.listingStatusHistory.create({
           data: {
             listingId: id,
             fromStatus: existing.status,
-            toStatus: body.status,
-            changedBy: admin.id,
+            toStatus: nextStatus,
+            changedBy: guard.actor.userId,
             reason: body.statusReason || null,
           },
         });
       }
 
-      // Set publishedAt when going active
-      if (body.status === "ACTIVE" && !existing.publishedAt) {
-        body.publishedAt = new Date();
-      }
-      if (body.status === "ARCHIVED") {
-        body.archivedAt = new Date();
-      }
-    }
-
-    // Handle price change
-    if (body.askingPrice && Number(body.askingPrice) !== Number(existing.askingPrice)) {
-      if (admin) {
-        await prisma.priceHistory.create({
+      if (priceChanged) {
+        await tx.priceHistory.create({
           data: {
             listingId: id,
             oldPrice: existing.askingPrice,
             newPrice: body.askingPrice,
-            changedBy: admin.id,
+            changedBy: guard.actor.userId,
             reason: body.priceChangeReason || null,
           },
         });
       }
-    }
 
-    const listing = await prisma.listing.update({
-      where: { id },
-      data: {
-        status: body.status || undefined,
-        askingPrice: body.askingPrice || undefined,
-        minimumPrice: body.minimumPrice,
-        priceOnRequest: body.priceOnRequest,
-        title: body.title,
-        description: body.description,
-        showFullAddress: body.showFullAddress,
-        publishedAt: body.publishedAt || undefined,
-        archivedAt: body.archivedAt || undefined,
-        internalNotes: body.internalNotes,
-      },
+      return tx.listing.update({
+        where: { id },
+        data: {
+          status: nextStatus,
+          askingPrice: body.askingPrice !== undefined ? body.askingPrice : undefined,
+          minimumPrice: body.minimumPrice,
+          priceOnRequest: body.priceOnRequest,
+          title: body.title,
+          description: body.description,
+          showFullAddress: body.showFullAddress,
+          publishedAt,
+          archivedAt,
+          internalNotes: body.internalNotes,
+        },
+      });
     });
 
     return NextResponse.json({ listing });

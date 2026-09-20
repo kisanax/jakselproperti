@@ -12,11 +12,14 @@ import {
   UserCheck,
   Handshake,
   MessageSquare,
-  MapPin,
   Sparkles,
   Menu,
   X,
   Home,
+  UsersRound,
+  Network,
+  Bell,
+  SlidersHorizontal,
 } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 
@@ -30,27 +33,34 @@ interface NavItem {
   icon: React.ElementType;
   badge?: number;
   section?: string;
+  /** Kunci modul untuk filter via Konfigurasi Akses (lib/module-access.ts). */
+  moduleKey?: string;
+  /** true = selalu & hanya SUPER_ADMIN (tidak bisa dimatikan lewat konfigurasi). */
+  superAdminOnly?: boolean;
 }
 
 const navItems: NavItem[] = [
-  { label: "Dashboard", href: "/admin", icon: LayoutDashboard, section: "Utama" },
-  { label: "Properti", href: "/admin/properties", icon: Building2, section: "Utama" },
-  { label: "Listing", href: "/admin/listings", icon: ListChecks, section: "Utama" },
-  { label: "Sitaan & Lelang", href: "/admin/auctions", icon: Gavel, section: "Utama" },
-  { label: "Owner", href: "/admin/owners", icon: Users, section: "Pihak Terkait" },
-  { label: "Perantara", href: "/admin/intermediaries", icon: Handshake, section: "Pihak Terkait" },
-  { label: "Leads (Kanban)", href: "/admin/leads", icon: MessageSquare, section: "CRM" },
-  { label: "Customer", href: "/admin/customers", icon: UserCheck, section: "CRM" },
-  { label: "Kawasan", href: "/admin/kawasan", icon: Sparkles, section: "Area & Lokasi" },
-  { label: "Kecamatan", href: "/admin/areas", icon: MapPin, section: "Area & Lokasi" },
+  { label: "Dashboard", href: "/admin", icon: LayoutDashboard, section: "Utama", moduleKey: "dashboard" },
+  { label: "Broker & Cabang", href: "/admin/brokers", icon: Network, section: "Organisasi", moduleKey: "brokers" },
+  { label: "Tim & Akses", href: "/admin/users", icon: UsersRound, section: "Organisasi", moduleKey: "users", superAdminOnly: true },
+  { label: "Properti", href: "/admin/properties", icon: Building2, section: "Utama", moduleKey: "properties" },
+  { label: "Listing", href: "/admin/listings", icon: ListChecks, section: "Utama", moduleKey: "listings" },
+  { label: "Sitaan & Lelang", href: "/admin/auctions", icon: Gavel, section: "Utama", moduleKey: "auctions" },
+  { label: "Owner", href: "/admin/owners", icon: Users, section: "Pihak Terkait", moduleKey: "owners" },
+  { label: "Perantara", href: "/admin/intermediaries", icon: Handshake, section: "Pihak Terkait", moduleKey: "intermediaries" },
+  { label: "Leads (Kanban)", href: "/admin/leads", icon: MessageSquare, section: "CRM", moduleKey: "leads" },
+  { label: "Customer", href: "/admin/customers", icon: UserCheck, section: "CRM", moduleKey: "customers" },
+  { label: "Kawasan", href: "/admin/kawasan", icon: Sparkles, section: "Area & Lokasi", moduleKey: "kawasan" },
+  { label: "Konfigurasi Akses", href: "/admin/settings/module-access", icon: SlidersHorizontal, section: "Pengaturan", superAdminOnly: true },
+  { label: "Pengaturan Notifikasi", href: "/admin/settings/notifications", icon: Bell, section: "Pengaturan", moduleKey: "notifications" },
 ];
 
 // Bottom nav shows 4 core items + 1 "Menu" trigger that opens the full sidebar drawer
 const bottomNavItems = [
-  { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
-  { label: "Properti", href: "/admin/properties", icon: Building2 },
-  { label: "Listing", href: "/admin/listings", icon: ListChecks },
-  { label: "Leads", href: "/admin/leads", icon: MessageSquare },
+  { label: "Dashboard", href: "/admin", icon: LayoutDashboard, moduleKey: "dashboard" },
+  { label: "Properti", href: "/admin/properties", icon: Building2, moduleKey: "properties" },
+  { label: "Listing", href: "/admin/listings", icon: ListChecks, moduleKey: "listings" },
+  { label: "Leads", href: "/admin/leads", icon: MessageSquare, moduleKey: "leads" },
   { label: "Menu", href: "#menu", icon: Menu, isTrigger: true },
 ];
 
@@ -59,7 +69,16 @@ const bottomNavItems = [
 // AdminShell Component
 // =============================================================================
 
-export default function AdminShell({ children }: { children: React.ReactNode }) {
+export default function AdminShell({
+  children,
+  platformRole,
+  accessibleModules = [],
+}: {
+  children: React.ReactNode;
+  platformRole?: string;
+  /** Daftar moduleKey yang aktif untuk role ini (dari Konfigurasi Akses). */
+  accessibleModules?: string[];
+}) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -99,8 +118,19 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     return pathname.startsWith(href);
   };
 
+  // Filter menu sesuai konfigurasi akses modul.
+  // Item ber-flag superAdminOnly (Tim & Akses, Konfigurasi Akses) selalu & hanya SUPER_ADMIN.
+  const visibleNavItems = navItems.filter((item) => {
+    if (item.superAdminOnly) return platformRole === "SUPER_ADMIN";
+    if (item.moduleKey) return accessibleModules.includes(item.moduleKey);
+    return true;
+  });
+  const visibleBottomNavItems = bottomNavItems.filter(
+    (item) => !item.moduleKey || accessibleModules.includes(item.moduleKey)
+  );
+
   // Group nav items by section
-  const sections = navItems.reduce(
+  const sections = visibleNavItems.reduce(
     (acc, item) => {
       const section = item.section || "Lainnya";
       if (!acc[section]) acc[section] = [];
@@ -125,7 +155,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           <Home size={22} style={{ color: "var(--color-admin-accent)" }} />
           <div>
             <h1>jakselproperti</h1>
-            <span>Admin Panel</span>
+            <span>Broker Workspace</span>
           </div>
           {/* Close button for mobile */}
           <button
@@ -181,7 +211,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
             </button>
             <div className="admin-topbar-brand">
               <span style={{ fontWeight: 700, fontSize: 15, letterSpacing: "-0.02em" }}>jakselproperti</span>
-              <span style={{ fontSize: 10, fontWeight: 600, color: "var(--color-admin-accent)", marginLeft: 6, textTransform: "uppercase" }}>Admin</span>
+              <span style={{ fontSize: 10, fontWeight: 600, color: "var(--color-admin-accent)", marginLeft: 6, textTransform: "uppercase" }}>Workspace</span>
             </div>
           </div>
           <div className="admin-topbar-right">
@@ -213,7 +243,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       {/* ---- Bottom Navigation (Mobile) ---- */}
       <nav className="admin-bottom-nav">
         <div className="admin-bottom-nav-inner">
-          {bottomNavItems.map((item) => {
+          {visibleBottomNavItems.map((item) => {
             const Icon = item.icon;
             if (item.isTrigger) {
               return (

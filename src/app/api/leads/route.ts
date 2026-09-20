@@ -1,14 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { LeadStage } from "@prisma/client";
+import { LeadStage, type Prisma } from "@prisma/client";
+import { requireOperationalUser } from "@/lib/api-auth";
+import { combineListingFilters } from "@/lib/services/property-listing-access";
 
 // GET /api/leads
 export async function GET(request: NextRequest) {
+  const guard = await requireOperationalUser();
+  if (guard.error) return guard.error;
+
   const searchParams = request.nextUrl.searchParams;
   const stage = searchParams.get("stage") as LeadStage | null;
   const search = searchParams.get("search") || "";
 
-  const where: Record<string, unknown> = {};
+  const where: Prisma.LeadWhereInput = {
+    listing: combineListingFilters(guard.actor, {}),
+  };
   if (stage && Object.values(LeadStage).includes(stage)) {
     where.currentStage = stage;
   }
@@ -56,6 +63,14 @@ export async function POST(request: NextRequest) {
         { error: "listingId, name, dan phone wajib diisi" },
         { status: 400 }
       );
+    }
+
+    const listing = await prisma.listing.findFirst({
+      where: { id: body.listingId, status: "ACTIVE" },
+      select: { id: true },
+    });
+    if (!listing) {
+      return NextResponse.json({ error: "Listing aktif tidak ditemukan" }, { status: 404 });
     }
 
     // 1. Find or create Customer by unique phone (Section 15.4)

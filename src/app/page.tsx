@@ -1,96 +1,145 @@
 import Link from "next/link";
 import Image from "next/image";
-import logo from "../../public/logo.png";
+import PortalHeader from "@/components/portal/PortalHeader";
+import MobilePropertyFilter from "@/components/portal/MobilePropertyFilter";
+import { prisma } from "@/lib/prisma";
+import { getMediaUrl } from "@/lib/storage";
 
-const PinIcon = () => (
-  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s6-5.2 6-11a6 6 0 1 0-12 0c0 5.8 6 11 6 11Z"/><circle cx="12" cy="10" r="2.2"/></svg>
-);
+export const dynamic = "force-dynamic";
 
-const HomeIcon = () => (
-  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 9-7 9 7v9H3v-9Z"/><path d="M9 20v-6h6v6"/></svg>
-);
+function formatRupiah(value: unknown): string {
+  if (!value) return "–";
+  const num = typeof value === "bigint" ? Number(value) : Number(value);
+  if (num >= 1_000_000_000) {
+    const m = num / 1_000_000_000;
+    return `Rp${m % 1 === 0 ? m.toFixed(0) : m.toFixed(1)} Miliar`;
+  }
+  if (num >= 1_000_000) {
+    const j = num / 1_000_000;
+    return `Rp${j % 1 === 0 ? j.toFixed(0) : j.toFixed(1)} Juta`;
+  }
+  return `Rp${num.toLocaleString("id-ID")}`;
+}
 
-const PriceIcon = () => (
-  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 8.5c-.6-.7-1.6-1-2.8-1-1.7 0-2.7.7-2.7 1.8 0 2.8 5.4 1.2 5.4 4.3 0 1.2-1.1 2-2.9 2-1.2 0-2.3-.4-3-1.1M12 5.5v13"/></svg>
-);
+const typeLabel: Record<string, string> = {
+  HOUSE: "Rumah",
+  APARTMENT: "Apartemen",
+  LAND: "Tanah",
+  SHOPHOUSE: "Ruko",
+};
 
-export default function Home() {
+const previewListings = process.env.PORTAL_PREVIEW_LISTINGS === "true";
+const visibleListingStatuses = previewListings
+  ? (["ACTIVE", "DRAFT", "READY_TO_PUBLISH"] as const)
+  : (["ACTIVE"] as const);
+
+export default async function Home() {
+  const properties = await prisma.property.findMany({
+    where: {
+      listings: { some: { status: { in: [...visibleListingStatuses] } } },
+    },
+    include: {
+      area: true,
+      village: true,
+      kawasan: true,
+      listings: {
+        where: { status: { in: [...visibleListingStatuses] } },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
+      propertyMedia: {
+        where: { type: "PHOTO", isPublic: true },
+        orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }],
+        take: 1,
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 70,
+  });
+
   return (
     <main>
-      <header className="site-header">
-        <Link className="brand" href="/" aria-label="Jakarta Selatan Properti — Beranda">
-          <Image
-            src={logo}
-            alt="Jakarta Selatan Properti"
-            priority
-          />
-        </Link>
-        <nav className="desktop-nav" aria-label="Navigasi utama">
-          <a href="#jual">Properti Dijual</a>
-          <a href="#area">Area Jaksel</a>
-          <a href="#insight">Insight</a>
-          <a href="#tentang">Tentang Kami</a>
-          <a className="nav-contact" href="https://wa.me/6281234567890" target="_blank" rel="noreferrer">Hubungi Kami</a>
-        </nav>
-        <details className="mobile-menu">
-          <summary aria-label="Buka menu navigasi"><span /><span /><span /></summary>
-          <nav aria-label="Navigasi mobile">
-            <a href="#jual">Properti Dijual</a>
-            <a href="#area">Area Jaksel</a>
-            <a href="#insight">Insight</a>
-            <a href="#tentang">Tentang Kami</a>
-            <a href="https://wa.me/6281234567890" target="_blank" rel="noreferrer">Hubungi Kami</a>
-          </nav>
-        </details>
-        <a className="mobile-call" href="tel:+6281234567890" aria-label="Telepon Jakarta Selatan Properti">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M7.1 3.8 9 3.3c.5-.1 1 .2 1.2.7l1 2.6c.2.5 0 1-.4 1.3L9.4 9c.9 2 2.6 3.7 4.6 4.6l1.1-1.4c.3-.4.9-.6 1.3-.4l2.6 1c.5.2.8.7.7 1.2l-.5 1.9c-.2 1-1.1 1.7-2.1 1.7A12.7 12.7 0 0 1 4.4 4.9c0-1 .7-1.9 1.7-2.1Z" />
-          </svg>
-        </a>
-      </header>
+      <PortalHeader />
 
-      <section className="hero" aria-labelledby="hero-title">
-        <video
-          className="hero-video"
-          autoPlay
-          muted
-          loop
-          playsInline
-          preload="metadata"
-          poster="https://images.unsplash.com/photo-1555899434-94d1368aa7af?auto=format&fit=crop&w=1800&q=85"
-          aria-label="Pemandangan udara kota Jakarta"
-        >
-          <source src="/videos/hero-jakarta.mp4" type="video/mp4" />
-        </video>
-        <div className="hero-shade" />
-        <div className="hero-content">
-          <h1 id="hero-title">Properti Pilihan<br />Jakarta Selatan</h1>
+      {properties.length > 0 && (
+        <MobilePropertyFilter propertyTypes={properties.map((property) => property.type)}>
+            {properties.map((property) => {
+              const listing = property.listings[0];
+              const photo = property.propertyMedia[0];
+              const photoUrl = photo ? getMediaUrl(photo.filePath) : null;
 
-          <form className="property-search" action="#jual">
-            <div className="search-tabs" role="tablist" aria-label="Jenis pencarian">
-              <button type="button" className="active" role="tab" aria-selected="true">Dijual</button>
-              <button type="button" role="tab" aria-selected="false">Disewa</button>
-            </div>
-            <div className="search-fields">
-              <label>
-                <PinIcon />
-                <span><small>LOKASI</small><select defaultValue=""><option value="">Pilih area Jakarta Selatan</option><option>Kebayoran Baru</option><option>Pondok Indah</option><option>Kemang</option><option>Cilandak</option></select></span>
-              </label>
-              <label>
-                <HomeIcon />
-                <span><small>JENIS PROPERTI</small><select defaultValue=""><option value="">Semua jenis</option><option>Rumah</option><option>Apartemen</option><option>Tanah</option><option>Ruko</option></select></span>
-              </label>
-              <label>
-                <PriceIcon />
-                <span><small>RENTANG HARGA</small><select defaultValue=""><option value="">Semua harga</option><option>Di bawah Rp5 M</option><option>Rp5–10 M</option><option>Rp10–25 M</option><option>Di atas Rp25 M</option></select></span>
-              </label>
-              <button className="submit-search" type="submit" aria-label="Cari properti">
-                <span>Cari</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
-              </button>
-            </div>
-          </form>
-        </div>
-      </section>
+              return (
+                <Link key={property.id} href={`/properti/${property.id}`} className="property-card-link">
+                <article className="property-card">
+                  <div className="property-card-image">
+                    {photoUrl ? (
+                      <Image
+                        src={photoUrl}
+                        alt={listing?.title || `Properti di ${property.kawasan?.name || property.area.name}`}
+                        width={800}
+                        height={500}
+                        unoptimized
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="property-card-placeholder">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 9-7 9 7v9H3v-9Z"/><path d="M9 20v-6h6v6"/></svg>
+                      </div>
+                    )}
+                    <span className="property-card-badge">{typeLabel[property.type] || property.type}</span>
+                    {listing?.status === "ACTIVE" && <span className="property-card-live">Aktif</span>}
+                  </div>
+
+                  <div className="property-card-body">
+                    <div className="property-card-location">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s6-5.2 6-11a6 6 0 1 0-12 0c0 5.8 6 11 6 11Z"/><circle cx="12" cy="10" r="2.2"/></svg>
+                      {property.kawasan?.name || property.village?.name || property.area.name}, {property.area.name}
+                    </div>
+
+                    <h3 className="property-card-title">
+                      {listing?.title || `${typeLabel[property.type]} di ${property.kawasan?.name || property.area.name}`}
+                    </h3>
+
+                    <div className="property-card-specs">
+                      {property.landArea && (
+                        <span title="Luas Tanah">
+                          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg>
+                          LT {property.landArea} m²
+                        </span>
+                      )}
+                      {property.buildingArea && (
+                        <span title="Luas Bangunan">
+                          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 9-7 9 7v9H3v-9Z"/></svg>
+                          LB {property.buildingArea} m²
+                        </span>
+                      )}
+                      {property.bedrooms && (
+                        <span title="Kamar Tidur">
+                          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7v10M21 7v10M3 17h18M3 13h18M5 13V7h14v6"/></svg>
+                          {property.bedrooms} KT
+                        </span>
+                      )}
+                      {property.bathrooms && (
+                        <span title="Kamar Mandi">
+                          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h16a1 1 0 0 1 1 1v3a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4v-3a1 1 0 0 1 1-1ZM6 12V5a2 2 0 0 1 2-2h3v3H8v6"/></svg>
+                          {property.bathrooms} KM
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="property-card-footer">
+                      <div className="property-card-price">
+                        {listing ? formatRupiah(listing.askingPrice) : "Hubungi Kami"}
+                      </div>
+                      <span className="property-card-cert">{property.certificateType}</span>
+                    </div>
+                  </div>
+                </article>
+                </Link>
+              );
+            })}
+        </MobilePropertyFilter>
+      )}
 
       <a className="floating-cta" href="https://wa.me/6281234567890?text=Halo%20Jaksel%20Properti%2C%20saya%20ingin%20konsultasi." target="_blank" rel="noreferrer" aria-label="Konsultasi melalui WhatsApp">
         <span className="pulse" />
@@ -98,6 +147,25 @@ export default function Home() {
         <span className="cta-copy"><small>BUTUH BANTUAN?</small><strong>Chat dengan kami</strong></span>
         <span className="cta-arrow">↗</span>
       </a>
+
+      <nav className="mobile-bottom-nav" aria-label="Navigasi utama mobile">
+        <Link href="/" className="mobile-bottom-active" aria-current="page">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg>
+          <span>Jelajah</span>
+        </Link>
+        <Link href="/jual">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 9-7 9 7v9H3v-9Z"/><path d="M9 20v-6h6v6"/></svg>
+          <span>Dijual</span>
+        </Link>
+        <Link href="/agents">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+          <span>Agen</span>
+        </Link>
+        <Link href="/login">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="9" r="3"/><path d="M6.5 18a7 7 0 0 1 11 0"/></svg>
+          <span>Akun</span>
+        </Link>
+      </nav>
     </main>
   );
 }

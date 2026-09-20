@@ -1,0 +1,126 @@
+/* ==========================================================================
+   CompactSearchPill.module.css — Airbnb-Style Refined Floating Search Pill
+   ========================================================================== */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #e2ded7;
+  border-radius: 14px;
+  padding: 4px 8px 4px 18px;
+  height: 48px;
+  cursor: pointer;
+  box-shadow: 0 1px 2px color-mix(in srgb, #222222 5%, transparent),
+              0 3px 10px color-mix(in srgb, #222222 8%, transparent);
+  transition: box-shadow 0.25s cubic-bezier(0.2, 0, 0, 1),
+    border-color 0.2s ease,
+    transform 0.2s cubic-bezier(0.2, 0, 0, 1),
+    background-color 0.2s ease;
+  user-select: none;
+}
+
+.pill:hover {
+  border-color: #cec9bd;
+  box-shadow: 0 2px 6px color-mix(in srgb, #222222 8%, transparent),
+              0 6px 18px color-mix(in srgb, #222222 12%, transparent);
+  transform: translateY(-1px);
+}
+
+.pill:active {
+  transform: scale(0.97) translateY(0);
+  box-shadow: 0 1px 4px color-mix(in srgb, #222222 6%, transparent);
+}
+
+.pill:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px var(--portal-action);
+}
+
+.segment {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--portal-ink);
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.segmentBold {
+  font-weight: 700;
+  color: var(--portal-action-deep);
+}
+
+.segmentMuted {
+  color: #6e695d;
+}
+
+.divider {
+  width: 1px;
+  height: 20px;
+  background-color: #ece9e1;
+  margin: 0 2px;
+}
+
+.iconWrapper {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--portal-action);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.pill:hover .iconWrapper {
+  background: var(--portal-action-hover);
+  transform: scale(1.04);
+}
+
+.iconWrapper:active {
+  transform: scale(0.94) !important;
+}
+
+.segment:focus-visible,
+.iconWrapper:focus-visible {
+  outline: 2px solid var(--portal-action);
+  outline-offset: 2px;
+}
+
+.searchIcon {
+  width: 14px;
+  height: 14px;
+}
+
+/* ─── Mobile Responsiveness ─── */
+@media (max-width: 640px) {
+  .pill {
+    height: 40px;
+    padding: 3px 5px 3px 12px;
+    max-width: 100%;
+  }
+
+  .segment {
+    font-size: 12px;
+    padding: 0 4px;
+    max-width: 85px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .iconWrapper {
+    width: 28px;
+    height: 28px;
+    margin-left: 4px;
+  }
+
+  .searchIcon {
+    width: 12px;
+    height: 12px;
+  }
+}

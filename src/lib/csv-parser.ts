@@ -7,6 +7,7 @@ export interface PropertyImportRow {
   kode?: string;
   tipe?: string;
   kecamatan: string;
+  kota?: string;
   kawasan?: string;
   alamat: string;
   luas_tanah?: string | number;
@@ -102,6 +103,7 @@ export function generatePropertyImportTemplate(): string {
     "kode",
     "tipe",
     "kecamatan",
+    "kota",
     "kawasan",
     "alamat",
     "luas_tanah",
@@ -120,9 +122,10 @@ export function generatePropertyImportTemplate(): string {
 
   const sampleRows = [
     [
-      "JS-SAMPLE-01",
+      "327102-0001",
       "Rumah",
       "Kebayoran Baru",
+      "Jakarta Selatan",
       "Kemang",
       "Jl. Kemang Raya No. 18, Jakarta Selatan",
       "400",
@@ -142,6 +145,7 @@ export function generatePropertyImportTemplate(): string {
       "",
       "Apartemen",
       "Kebayoran Baru",
+      "Jakarta Selatan",
       "Senopati",
       "Senopati Suites Tower 2 Lt. 15",
       "180",

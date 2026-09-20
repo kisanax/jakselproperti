@@ -1,6 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { Plus, ListChecks } from "lucide-react";
+import type { Prisma } from "@prisma/client";
+import { getCurrentOperationalActor } from "@/lib/api-auth";
+import { combineListingFilters } from "@/lib/services/property-listing-access";
+import { notFound } from "next/navigation";
 
 function getStatusBadgeClass(s: string) {
   const m: Record<string, string> = {
@@ -36,17 +40,20 @@ function formatDate(date: Date) {
 export const dynamic = "force-dynamic";
 
 export default async function ListingsPage({ searchParams }: { searchParams: Promise<{ status?: string; search?: string; page?: string }> }) {
+  const operational = await getCurrentOperationalActor();
+  if (!operational) notFound();
   const params = await searchParams;
   const page = parseInt(params.page || "1");
   const perPage = 20;
-  const where: Record<string, unknown> = {};
-  if (params.status) where.status = params.status;
+  const filters: Prisma.ListingWhereInput = {};
+  if (params.status) filters.status = params.status as Prisma.EnumListingStatusFilter["equals"];
   if (params.search) {
-    where.OR = [
+    filters.OR = [
       { title: { contains: params.search } },
       { property: { code: { contains: params.search } } },
     ];
   }
+  const where = combineListingFilters(operational.actor, filters);
 
   const [listings, total] = await Promise.all([
     prisma.listing.findMany({

@@ -16,7 +16,7 @@ import { toast, Toaster } from "sonner";
 import { parseCSV, generatePropertyImportTemplate, PropertyImportRow } from "@/lib/csv-parser";
 
 interface AreaOption {
-  id: string;
+  id: number;
   name: string;
 }
 

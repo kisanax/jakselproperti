@@ -8,12 +8,7 @@ export const metadata = {
 };
 
 export default async function SmartImportPage() {
-  const [areas, amenities, kawasanList] = await Promise.all([
-    prisma.area.findMany({
-      where: { level: 1, isActive: true },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true, slug: true },
-    }),
+  const [amenities, kawasanList] = await Promise.all([
     prisma.amenity.findMany({
       where: { isActive: true },
       orderBy: [{ category: "asc" }, { name: "asc" }],
@@ -28,7 +23,6 @@ export default async function SmartImportPage() {
 
   return (
     <SmartImportClient
-      areas={areas}
       amenities={amenities}
       kawasanList={kawasanList}
     />

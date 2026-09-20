@@ -1,31 +1,25 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import ListingDetailClient from "./ListingDetailClient";
+import { getCurrentOperationalActor } from "@/lib/api-auth";
+import {
+  allowedListingTransitions,
+  combineListingFilters,
+} from "@/lib/services/property-listing-access";
 
 export const dynamic = "force-dynamic";
-
-const VALID_TRANSITIONS: Record<string, string[]> = {
-  DRAFT: ["PENDING_VERIFICATION"],
-  PENDING_VERIFICATION: ["READY_TO_PUBLISH", "DRAFT"],
-  READY_TO_PUBLISH: ["ACTIVE", "DRAFT"],
-  ACTIVE: ["IN_NEGOTIATION", "SUSPENDED", "WITHDRAWN", "EXPIRED"],
-  IN_NEGOTIATION: ["SOLD", "ACTIVE", "SUSPENDED"],
-  SOLD: ["ARCHIVED"],
-  SUSPENDED: ["ACTIVE", "WITHDRAWN", "ARCHIVED"],
-  WITHDRAWN: ["ARCHIVED", "DRAFT"],
-  EXPIRED: ["ARCHIVED", "DRAFT"],
-  ARCHIVED: [],
-};
 
 export default async function ListingDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const operational = await getCurrentOperationalActor();
+  if (!operational) notFound();
   const { id } = await params;
 
-  const rawListing = await prisma.listing.findUnique({
-    where: { id },
+  const rawListing = await prisma.listing.findFirst({
+    where: combineListingFilters(operational.actor, { id }),
     include: {
       property: {
         include: {
@@ -116,7 +110,7 @@ export default async function ListingDetailPage({
     })),
   };
 
-  const validTransitions = VALID_TRANSITIONS[rawListing.status] || [];
+  const validTransitions = allowedListingTransitions(operational.actor, rawListing.status);
 
   return <ListingDetailClient listing={listing} validTransitions={validTransitions} />;
 }

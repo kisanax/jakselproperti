@@ -13,25 +13,20 @@ import {
   ImageIcon,
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
-
-interface AreaOption {
-  id: string;
-  name: string;
-  slug: string;
-}
+import { AreaPicker } from "@/components/admin-ui";
 
 interface KawasanItem {
   id: string;
   name: string;
   slug: string;
-  areaId: string;
+  areaId: number;
   tagline: string | null;
   bannerImage: string | null;
   isFeatured: boolean;
   sortOrder: number;
   isActive: boolean;
   area: {
-    id: string;
+    id: number;
     name: string;
     slug: string;
   };
@@ -42,10 +37,9 @@ interface KawasanItem {
 
 interface KawasanListProps {
   initialKawasan: KawasanItem[];
-  areas: AreaOption[];
 }
 
-export default function KawasanList({ initialKawasan, areas }: KawasanListProps) {
+export default function KawasanList({ initialKawasan }: KawasanListProps) {
   const [kawasanList, setKawasanList] = useState<KawasanItem[]>(initialKawasan);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingKawasan, setEditingKawasan] = useState<KawasanItem | null>(null);
@@ -54,7 +48,7 @@ export default function KawasanList({ initialKawasan, areas }: KawasanListProps)
   // Form states
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
-  const [areaId, setAreaId] = useState(areas[0]?.id || "");
+  const [areaId, setAreaId] = useState("");
   const [tagline, setTagline] = useState("");
   const [bannerImage, setBannerImage] = useState("");
   const [isFeatured, setIsFeatured] = useState(false);
@@ -64,7 +58,7 @@ export default function KawasanList({ initialKawasan, areas }: KawasanListProps)
     setEditingKawasan(null);
     setName("");
     setSlug("");
-    setAreaId(areas[0]?.id || "");
+    setAreaId("");
     setTagline("");
     setBannerImage("");
     setIsFeatured(false);
@@ -76,7 +70,7 @@ export default function KawasanList({ initialKawasan, areas }: KawasanListProps)
     setEditingKawasan(k);
     setName(k.name);
     setSlug(k.slug);
-    setAreaId(k.areaId);
+    setAreaId(String(k.areaId));
     setTagline(k.tagline || "");
     setBannerImage(k.bannerImage || "");
     setIsFeatured(k.isFeatured);
@@ -471,35 +465,26 @@ export default function KawasanList({ initialKawasan, areas }: KawasanListProps)
                   />
                 </div>
 
-                {/* Slug & Kecamatan */}
-                <div className="admin-grid-2">
-                  <div className="admin-input-group">
-                    <label className="admin-label">Slug URL *</label>
-                    <input
-                      type="text"
-                      className="admin-input"
-                      placeholder="kemang"
-                      value={slug}
-                      onChange={(e) => setSlug(e.target.value)}
-                      required
-                    />
-                  </div>
+                <div className="admin-input-group">
+                  <label className="admin-label">Slug URL *</label>
+                  <input
+                    type="text"
+                    className="admin-input"
+                    placeholder="kemang"
+                    value={slug}
+                    onChange={(e) => setSlug(e.target.value)}
+                    required
+                  />
+                </div>
 
-                  <div className="admin-input-group">
-                    <label className="admin-label">Kecamatan Induk *</label>
-                    <select
-                      className="admin-input"
-                      value={areaId}
-                      onChange={(e) => setAreaId(e.target.value)}
-                      required
-                    >
-                      {areas.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                <div className="admin-input-group">
+                  <AreaPicker
+                    value={areaId}
+                    maxLevel={3}
+                    required
+                    idPrefix="kawasan-area"
+                    onChange={({ kecamatanId }) => setAreaId(kecamatanId ? String(kecamatanId) : "")}
+                  />
                 </div>
 
                 {/* Tagline Promo Homepage */}

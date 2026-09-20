@@ -9,31 +9,23 @@ import {
   MapPin,
   Ruler,
   FileText,
-  Camera,
   UploadCloud,
   Trash2,
   Star,
-  CheckCircle2,
   ImageIcon,
   Maximize2,
   X,
   ChevronLeft,
   ChevronRight,
-  Eye,
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 import PropertyPublicPreviewModal from "../PropertyPublicPreviewModal";
-
-interface AreaOption {
-  id: string;
-  name: string;
-  slug: string;
-}
+import { AreaPicker } from "@/components/admin-ui";
 
 interface KawasanOption {
   id: string;
   name: string;
-  areaId: string;
+  areaId: number;
 }
 
 export interface MediaItem {
@@ -49,7 +41,8 @@ interface PropertyData {
   id: string;
   code: string;
   type: string;
-  areaId: string;
+  areaId: number;
+  villageId: number | null;
   kawasanId: string | null;
   address: string;
   landArea: number | null;
@@ -69,7 +62,6 @@ interface PropertyData {
 
 interface EditPropertyProps {
   property: PropertyData;
-  areas: AreaOption[];
   kawasanList: KawasanOption[];
   initialMedia?: MediaItem[];
   areaName?: string;
@@ -91,7 +83,6 @@ interface EditPropertyProps {
 
 export default function EditPropertyClient({
   property,
-  areas,
   kawasanList,
   initialMedia = [],
   areaName,
@@ -103,7 +94,9 @@ export default function EditPropertyClient({
 
   // Form states
   const [type, setType] = useState(property.type);
-  const [areaId, setAreaId] = useState(property.areaId);
+  const [areaId, setAreaId] = useState(String(property.areaId));
+  const [villageId, setVillageId] = useState(property.villageId ? String(property.villageId) : "");
+  const [pickerAreaId, setPickerAreaId] = useState<number | null>(property.villageId ?? property.areaId);
   const [kawasanId, setKawasanId] = useState(property.kawasanId || "");
   const [address, setAddress] = useState(property.address);
   const [landArea, setLandArea] = useState(property.landArea?.toString() || "");
@@ -192,7 +185,8 @@ export default function EditPropertyClient({
     if (kId) {
       const selectedKawasan = kawasanList.find((k) => k.id === kId);
       if (selectedKawasan) {
-        setAreaId(selectedKawasan.areaId);
+        setAreaId(String(selectedKawasan.areaId));
+        setPickerAreaId(selectedKawasan.areaId);
       }
     }
   };
@@ -269,6 +263,7 @@ export default function EditPropertyClient({
       const payload = {
         type,
         areaId,
+        villageId: villageId || null,
         kawasanId: kawasanId || null,
         address: address.trim(),
         landArea: landArea ? parseInt(landArea) : null,
@@ -439,8 +434,8 @@ export default function EditPropertyClient({
               </div>
             </div>
 
-            {/* Kawasan & Kecamatan */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            {/* Kawasan & administrative area */}
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 16 }}>
               <div>
                 <label className="admin-label">Kawasan Populer / Branded</label>
                 <select
@@ -449,7 +444,7 @@ export default function EditPropertyClient({
                   onChange={(e) => handleKawasanChange(e.target.value)}
                 >
                   <option value="">— Tidak terikat kawasan khusus —</option>
-                  {kawasanList.map((k) => (
+                  {kawasanList.filter((k) => !areaId || String(k.areaId) === areaId).map((k) => (
                     <option key={k.id} value={k.id}>
                       ⭐ {k.name}
                     </option>
@@ -460,23 +455,19 @@ export default function EditPropertyClient({
                 </div>
               </div>
 
-              <div>
-                <label className="admin-label">
-                  Kecamatan Resmi (Jakarta Selatan) <span style={{ color: "#ef4444" }}>*</span>
-                </label>
-                <select
-                  className="admin-input"
-                  value={areaId}
-                  onChange={(e) => setAreaId(e.target.value)}
-                  required
-                >
-                  {areas.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <AreaPicker
+                value={pickerAreaId}
+                required
+                idPrefix="edit-property-area"
+                onChange={({ areaId: leafId, kecamatanId }) => {
+                  setPickerAreaId(leafId);
+                  setAreaId(kecamatanId ? String(kecamatanId) : "");
+                  setVillageId(leafId && kecamatanId && leafId !== kecamatanId ? String(leafId) : "");
+                  if (kawasanId && kawasanList.find((item) => item.id === kawasanId)?.areaId !== kecamatanId) {
+                    setKawasanId("");
+                  }
+                }}
+              />
             </div>
 
             {/* Address */}

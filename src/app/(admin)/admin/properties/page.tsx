@@ -1,12 +1,23 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { Plus, Search, Building2, MapPin, Ruler, BedDouble, Bath, FileSpreadsheet, Sparkles } from "lucide-react";
+import type { Prisma } from "@prisma/client";
+import { getCurrentOperationalActor } from "@/lib/api-auth";
+import {
+  combinePropertyFilters,
+  listingAccessFilter,
+  type OperationalActor,
+} from "@/lib/services/property-listing-access";
+import { notFound } from "next/navigation";
 
 // =============================================================================
 // Data Fetching
 // =============================================================================
 
-async function getProperties(searchParams: Promise<{ page?: string; search?: string; type?: string; area?: string }>) {
+async function getProperties(
+  searchParams: Promise<{ page?: string; search?: string; type?: string; area?: string }>,
+  actor: OperationalActor
+) {
   const params = await searchParams;
   const page = parseInt(params.page || "1");
   const perPage = 20;
@@ -14,22 +25,24 @@ async function getProperties(searchParams: Promise<{ page?: string; search?: str
   const type = params.type || "";
   const areaSlug = params.area || "";
 
-  const where: Record<string, unknown> = {};
+  const filters: Prisma.PropertyWhereInput = {};
 
   if (search) {
-    where.OR = [
+    filters.OR = [
       { code: { contains: search } },
       { address: { contains: search } },
     ];
   }
 
   if (type) {
-    where.type = type;
+    filters.type = type as Prisma.EnumPropertyTypeFilter["equals"];
   }
 
   if (areaSlug) {
-    where.area = { slug: areaSlug };
+    filters.area = { slug: areaSlug };
   }
+
+  const where = combinePropertyFilters(actor, filters);
 
   const [properties, total] = await Promise.all([
     prisma.property.findMany({
@@ -38,6 +51,7 @@ async function getProperties(searchParams: Promise<{ page?: string; search?: str
         area: true,
         kawasan: true,
         listings: {
+          where: listingAccessFilter(actor),
           orderBy: { createdAt: "desc" },
           take: 1,
           select: {
@@ -52,7 +66,10 @@ async function getProperties(searchParams: Promise<{ page?: string; search?: str
           take: 1,
         },
         _count: {
-          select: { propertyMedia: true, listings: true },
+          select: {
+            propertyMedia: true,
+            listings: { where: listingAccessFilter(actor) },
+          },
         },
       },
       orderBy: { createdAt: "desc" },
@@ -149,7 +166,12 @@ export default async function PropertiesPage({
 }: {
   searchParams: Promise<{ page?: string; search?: string; type?: string; area?: string }>;
 }) {
-  const { properties, total, page, perPage } = await getProperties(searchParams);
+  const operational = await getCurrentOperationalActor();
+  if (!operational) notFound();
+  const { properties, total, page, perPage } = await getProperties(
+    searchParams,
+    operational.actor
+  );
   const totalPages = Math.ceil(total / perPage);
 
   return (
@@ -168,12 +190,6 @@ export default async function PropertiesPage({
           <Link
             href="/admin/properties/smart-import"
             className="admin-btn admin-btn-secondary"
-            style={{
-              borderColor: "rgba(16, 185, 129, 0.4)",
-              background: "rgba(16, 185, 129, 0.08)",
-              color: "#10b981",
-              fontWeight: 600,
-            }}
           >
             <Sparkles size={16} /> Smart Paste WA
           </Link>
@@ -372,7 +388,7 @@ export default async function PropertiesPage({
                         style={{
                           fontSize: 15,
                           fontWeight: 700,
-                          color: "var(--color-admin-accent)",
+                          color: "var(--workspace-primary)",
                         }}
                       >
                         {formatRupiah(latestListing.askingPrice)}

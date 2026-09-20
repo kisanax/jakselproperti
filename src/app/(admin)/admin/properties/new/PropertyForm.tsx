@@ -3,7 +3,6 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
-  MapPin,
   AlertTriangle,
   Camera,
   Upload,
@@ -19,18 +18,11 @@ import {
   Sparkles,
 } from "lucide-react";
 import { Toaster, toast } from "sonner";
+import { AreaPicker } from "@/components/admin-ui";
 
 // =============================================================================
 // Types
 // =============================================================================
-
-interface AreaOption {
-  id: string;
-  name: string;
-  slug: string;
-  level: number;
-  parentName: string | null;
-}
 
 interface AmenityOption {
   id: string;
@@ -43,11 +35,10 @@ interface KawasanOption {
   id: string;
   name: string;
   slug: string;
-  areaId: string;
+  areaId: number;
 }
 
 interface PropertyFormProps {
-  areas: AreaOption[];
   amenitiesByCategory: Record<string, AmenityOption[]>;
   kawasan?: KawasanOption[];
 }
@@ -55,6 +46,7 @@ interface PropertyFormProps {
 interface FormData {
   // Step 1
   areaId: string;
+  villageId: string;
   areaName: string;
   kawasanId: string;
   address: string;
@@ -124,6 +116,7 @@ const CERTIFICATE_TYPES = [
 
 const INITIAL_FORM: FormData = {
   areaId: "",
+  villageId: "",
   areaName: "",
   kawasanId: "",
   address: "",
@@ -157,13 +150,14 @@ const INITIAL_FORM: FormData = {
 // Main Component
 // =============================================================================
 
-export default function PropertyForm({ areas, amenitiesByCategory, kawasan = [] }: PropertyFormProps) {
+export default function PropertyForm({ amenitiesByCategory, kawasan = [] }: PropertyFormProps) {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState<FormData>(INITIAL_FORM);
   const [photos, setPhotos] = useState<PhotoFile[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+  const [pickerAreaId, setPickerAreaId] = useState<number | null>(null);
 
   // Collapse states
   const [ownerExpanded, setOwnerExpanded] = useState(false);
@@ -171,11 +165,6 @@ export default function PropertyForm({ areas, amenitiesByCategory, kawasan = [] 
   const [privacyExpanded, setPrivacyExpanded] = useState(false);
   const [commissionExpanded, setCommissionExpanded] = useState(false);
   const [watermarkExpanded, setWatermarkExpanded] = useState(false);
-
-  // Area autocomplete
-  const [areaSearch, setAreaSearch] = useState("");
-  const [areaDropdownOpen, setAreaDropdownOpen] = useState(false);
-  const areaInputRef = useRef<HTMLInputElement>(null);
 
   // File input ref
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -189,32 +178,6 @@ export default function PropertyForm({ areas, amenitiesByCategory, kawasan = [] 
       setFormData((prev) => ({ ...prev, [key]: value }));
     },
     []
-  );
-
-  // =========================================================================
-  // Area Autocomplete
-  // =========================================================================
-
-  const filteredAreas = useMemo(() => {
-    if (!areaSearch.trim()) return areas.slice(0, 10);
-    const search = areaSearch.toLowerCase();
-    return areas
-      .filter(
-        (a) =>
-          a.name.toLowerCase().includes(search) ||
-          (a.parentName && a.parentName.toLowerCase().includes(search))
-      )
-      .slice(0, 10);
-  }, [areaSearch, areas]);
-
-  const selectArea = useCallback(
-    (area: AreaOption) => {
-      updateField("areaId", area.id);
-      updateField("areaName", area.parentName ? `${area.name}, ${area.parentName}` : area.name);
-      setAreaSearch(area.parentName ? `${area.name}, ${area.parentName}` : area.name);
-      setAreaDropdownOpen(false);
-    },
-    [updateField]
   );
 
   // =========================================================================
@@ -387,6 +350,7 @@ export default function PropertyForm({ areas, amenitiesByCategory, kawasan = [] 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           areaId: formData.areaId,
+          villageId: formData.villageId || null,
           kawasanId: formData.kawasanId || null,
           address: formData.address,
           type: formData.type,
@@ -543,52 +507,23 @@ export default function PropertyForm({ areas, amenitiesByCategory, kawasan = [] 
       {/* ================================================================= */}
       {currentStep === 0 && (
         <div className="animate-slide-up">
-          {/* Area Autocomplete */}
+          {/* Administrative area */}
           <div className="admin-input-group">
-            <label className="admin-label">Area *</label>
-            <div className="admin-autocomplete">
-              <input
-                ref={areaInputRef}
-                type="text"
-                className="admin-input"
-                placeholder="Ketik nama area..."
-                value={areaSearch}
-                onChange={(e) => {
-                  setAreaSearch(e.target.value);
-                  setAreaDropdownOpen(true);
-                  if (!e.target.value) {
-                    updateField("areaId", "");
-                    updateField("areaName", "");
-                  }
-                }}
-                onFocus={() => setAreaDropdownOpen(true)}
-                onBlur={() => setTimeout(() => setAreaDropdownOpen(false), 200)}
-              />
-              {areaDropdownOpen && filteredAreas.length > 0 && (
-                <div className="admin-autocomplete-dropdown">
-                  {filteredAreas.map((area) => (
-                    <button
-                      key={area.id}
-                      className="admin-autocomplete-item"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        selectArea(area);
-                      }}
-                    >
-                      <MapPin size={16} className="admin-autocomplete-item-icon" />
-                      <div>
-                        <div>{area.name}</div>
-                        {area.parentName && (
-                          <div className="admin-autocomplete-item-sub">
-                            {area.parentName}
-                          </div>
-                        )}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <AreaPicker
+              value={pickerAreaId}
+              required
+              idPrefix="new-property-area"
+              onChange={({ areaId, kecamatanId, area }) => {
+                setPickerAreaId(areaId);
+                updateField("areaId", kecamatanId ? String(kecamatanId) : "");
+                updateField("villageId", area?.level === 4 && areaId ? String(areaId) : "");
+                updateField("areaName", area?.name || "");
+                if (formData.kawasanId && kawasan.find((item) => item.id === formData.kawasanId)?.areaId !== kecamatanId) {
+                  updateField("kawasanId", "");
+                }
+              }}
+            />
+            <div className="admin-input-hint">Kecamatan dipakai untuk kode properti; kelurahan/desa disimpan sebagai lokasi rinci.</div>
           </div>
 
           {/* Kawasan Populer (Opsional) */}
@@ -603,14 +538,15 @@ export default function PropertyForm({ areas, amenitiesByCategory, kawasan = [] 
                 if (selectedKawasanId) {
                   const found = kawasan.find((k) => k.id === selectedKawasanId);
                   if (found && !formData.areaId) {
-                    const matchedArea = areas.find((a) => a.id === found.areaId);
-                    if (matchedArea) selectArea(matchedArea);
+                    setPickerAreaId(found.areaId);
+                    updateField("areaId", String(found.areaId));
+                    updateField("villageId", "");
                   }
                 }
               }}
             >
               <option value="">Pilih kawasan populer jika ada (e.g. Kemang, Senopati, Pondok Indah)...</option>
-              {kawasan.map((k) => (
+              {kawasan.filter((k) => !formData.areaId || String(k.areaId) === formData.areaId).map((k) => (
                 <option key={k.id} value={k.id}>
                   {k.name}
                 </option>

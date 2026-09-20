@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getStorage } from "@/lib/storage";
+import { requireOperationalUser } from "@/lib/api-auth";
+import { combinePropertyFilters } from "@/lib/services/property-listing-access";
 import crypto from "crypto";
 
 // =============================================================================
@@ -11,11 +13,16 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const guard = await requireOperationalUser();
+  if (guard.error) return guard.error;
+
   const { id } = await params;
 
   try {
     // Verify property exists
-    const property = await prisma.property.findUnique({ where: { id } });
+    const property = await prisma.property.findFirst({
+      where: combinePropertyFilters(guard.actor, { id }),
+    });
     if (!property) {
       return NextResponse.json({ error: "Properti tidak ditemukan" }, { status: 404 });
     }
@@ -101,13 +108,20 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const guard = await requireOperationalUser();
+  if (guard.error) return guard.error;
+
   const { id } = await params;
 
   try {
     const { mediaId } = await request.json();
 
     const media = await prisma.propertyMedia.findFirst({
-      where: { id: mediaId, propertyId: id },
+      where: {
+        id: mediaId,
+        propertyId: id,
+        property: combinePropertyFilters(guard.actor, {}),
+      },
     });
 
     if (!media) {
@@ -150,9 +164,24 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const guard = await requireOperationalUser();
+  if (guard.error) return guard.error;
+
   const { id } = await params;
   try {
     const { mediaId, isPrimary } = await request.json();
+
+    const media = await prisma.propertyMedia.findFirst({
+      where: {
+        id: mediaId,
+        propertyId: id,
+        property: combinePropertyFilters(guard.actor, {}),
+      },
+      select: { id: true },
+    });
+    if (!media) {
+      return NextResponse.json({ error: "Media tidak ditemukan" }, { status: 404 });
+    }
 
     if (isPrimary) {
       await prisma.propertyMedia.updateMany({
@@ -160,7 +189,7 @@ export async function PATCH(
         data: { isPrimary: false },
       });
       await prisma.propertyMedia.update({
-        where: { id: mediaId },
+        where: { id: media.id },
         data: { isPrimary: true },
       });
     }

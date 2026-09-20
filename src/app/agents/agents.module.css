@@ -1,0 +1,349 @@
+/* ==========================================================================
+   /agents — Our Agents (Direktori Broker + Pendaftaran)
+   Adapted from William Raveis Nantucket /agents
+
+   TYPOGRAPHY SPEC (konsisten dengan /jual):
+   ┌──────────────────────────────┬──────────────┬────────┬──────┬─────────┬───────────────────┐
+   │ Elemen                       │ Font         │ Weight │ Size │ LH      │ Color             │
+   ├──────────────────────────────┼──────────────┼────────┼──────┼─────────┼───────────────────┤
+   │ H1 hero                      │ The Seasons  │ 400    │ 60px │ 1.05    │ #222222           │
+   │ Nama agen (card)             │ The Seasons  │ 600    │ 21px │ 26px    │ #222222           │
+   │ Deskripsi / paragraf         │ EB Garamond  │ 400    │ 20px │ 30px    │ #717171           │
+   │ Eyebrow / label              │ EB Garamond  │ 700    │ 11px │ 16px    │ var(--gold)       │
+   └──────────────────────────────┴──────────────┴────────┴──────┴─────────┴───────────────────┘
+
+   CSS variables (globals.css):
+   • var(--font-jakarta) → heading/body/ui font
+   • var(--font-jakarta) → body/ui font
+   • var(--paper)  #fffdf9   → page background
+   • var(--ink)    #18352b   → primary text
+   • var(--forest) #123d2f   → accent dark green
+   • var(--gold)   #c6a464   → eyebrow accent
+   • var(--nav-blue) #5d89b3 → interactive accent
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   PAGE SHELL
+   -------------------------------------------------------------------------- */
+.page {
+  background: var(--paper, #fffdf9);
+  color: var(--ink, #18352b);
+  min-height: 100vh;
+  font-family: var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 22px;
+}
+
+.page :global(.site-header) {
+  background: var(--paper, #fffdf9);
+}
+
+.content {
+  width: min(1420px, calc(100% - 56px));
+  margin: 0 auto;
+  font-family: var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --------------------------------------------------------------------------
+   HERO — centered serif ala Raveis "Trusted Local Insight"
+   -------------------------------------------------------------------------- */
+.hero {
+  text-align: center;
+  padding: 60px 24px 0;
+}
+
+.eyebrow {
+  color: var(--gold, #c6a464);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.heroTitle {
+  font: 400 clamp(40px, 5vw, 60px) / 1.05 var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  letter-spacing: -0.03em;
+  color: #222222;
+  margin: 14px 0 18px;
+}
+
+.heroDesc {
+  max-width: 720px;
+  margin: 0 auto;
+  font-size: 20px;
+  line-height: 30px;
+  color: #717171;
+}
+
+/* --------------------------------------------------------------------------
+   SEARCH — underlined centered input
+   -------------------------------------------------------------------------- */
+.search {
+  max-width: 560px;
+  margin: 34px auto 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid #d8d4c9;
+  padding: 6px 4px 10px;
+  color: #717171;
+  transition: border-color 0.2s;
+}
+
+.search:focus-within {
+  border-color: var(--nav-blue, #5d89b3);
+}
+
+.search svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  flex: 0 0 auto;
+}
+
+.search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink, #18352b);
+  font: 400 18px / 24px var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+}
+
+.search input::placeholder {
+  color: #717171;
+}
+
+/* --------------------------------------------------------------------------
+   AGENT GRID — 5 kolom desktop ala Raveis
+   -------------------------------------------------------------------------- */
+.gridSection {
+  padding: 0 0 10px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 40px 26px;
+  padding: 46px 0 20px;
+}
+
+.card {
+  text-align: center;
+}
+
+.photo {
+  aspect-ratio: 1 / 1.05;
+  overflow: hidden;
+  background: #edf0eb;
+  border-radius: 2px;
+  margin-bottom: 14px;
+  display: grid;
+  place-items: center;
+}
+
+.photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.initials {
+  font: 400 44px var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  color: #8ba398;
+}
+
+.name {
+  font: 600 21px / 26px var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  letter-spacing: -0.01em;
+  color: #222222;
+  margin: 0;
+}
+
+.role {
+  margin: 6px 0 0;
+  font-size: 15px;
+  line-height: 20px;
+  color: #717171;
+}
+
+.city {
+  margin: 3px 0 0;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: #717171;
+  text-transform: uppercase;
+}
+
+/* --------------------------------------------------------------------------
+   EMPTY STATE
+   -------------------------------------------------------------------------- */
+.empty {
+  text-align: center;
+  padding: 56px 20px 30px;
+}
+
+.empty h2 {
+  font: 600 26px / 32px var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  color: #222222;
+  margin: 0 0 10px;
+}
+
+.empty p {
+  max-width: 520px;
+  margin: 0 auto;
+  font-size: 17px;
+  line-height: 25px;
+  color: #717171;
+}
+
+/* --------------------------------------------------------------------------
+   SECTION PENDAFTARAN BROKER
+   -------------------------------------------------------------------------- */
+.join {
+  max-width: 780px;
+  margin: 44px auto 0;
+  text-align: center;
+  padding: 50px 44px;
+  border: 1px solid #e7e3d8;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 12px 35px rgba(23, 32, 51, 0.06);
+}
+
+.joinEyebrow {
+  color: var(--gold, #c6a464);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.joinTitle {
+  font: 400 clamp(28px, 3.4vw, 38px) / 1.12 var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  letter-spacing: -0.025em;
+  color: #222222;
+  margin: 12px 0 14px;
+}
+
+.joinDesc {
+  max-width: 560px;
+  margin: 0 auto;
+  font-size: 17px;
+  line-height: 26px;
+  color: #717171;
+}
+
+.joinButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 24px;
+  padding: 13px 30px;
+  border-radius: 6px;
+  background: var(--portal-action, #c24f24);
+  color: #fff;
+  font: 600 15px / 20px var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  text-decoration: none;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.joinButton:hover {
+  background: var(--portal-action-hover, #a83d18);
+  transform: translateY(-2px);
+}
+
+.joinNote {
+  margin: 16px auto 0;
+  max-width: 480px;
+  font-size: 13px;
+  line-height: 19px;
+  color: #717171;
+}
+
+/* --------------------------------------------------------------------------
+   FOOTER
+   -------------------------------------------------------------------------- */
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 40px 0 46px;
+  margin-top: 50px;
+  border-top: 1px solid #ece9e1;
+  font-family: var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+}
+
+.footer a {
+  color: var(--nav-blue, #5d89b3);
+  text-decoration: none;
+  font-size: 15px;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.footer p {
+  margin: 0;
+  font-size: 14px;
+  color: #717171;
+}
+
+/* --------------------------------------------------------------------------
+   RESPONSIVE
+   -------------------------------------------------------------------------- */
+@media (max-width: 1100px) {
+  .grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .content {
+    width: calc(100% - 32px);
+  }
+
+  .hero {
+    padding-top: 40px;
+  }
+
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 30px 16px;
+    padding-top: 34px;
+  }
+
+  .join {
+    padding: 38px 22px;
+  }
+
+  .footer {
+    flex-direction: column;
+    text-align: center;
+  }
+}
+
+@media (max-width: 440px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

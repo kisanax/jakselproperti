@@ -25,6 +25,11 @@ import {
   Gavel,
 } from "lucide-react";
 import { categories, auctionStatuses, effectiveStatus } from "@/lib/auctions";
+import { getCurrentOperationalActor } from "@/lib/api-auth";
+import {
+  combinePropertyFilters,
+  listingAccessFilter,
+} from "@/lib/services/property-listing-access";
 
 // =============================================================================
 // Helpers
@@ -68,15 +73,19 @@ function formatDate(date: Date): string {
 // =============================================================================
 
 export default async function PropertyDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const operational = await getCurrentOperationalActor();
+  if (!operational) notFound();
   const { id } = await params;
 
   const property = await prisma.property.findFirst({
     where: {
-      OR: [{ id }, { code: id }],
+      ...combinePropertyFilters(operational.actor, { OR: [{ id }, { code: id }] }),
     },
     include: {
       area: { include: { parent: true } },
+      village: true,
       listings: {
+        where: listingAccessFilter(operational.actor),
         orderBy: { createdAt: "desc" },
         include: {
           statusHistory: { orderBy: { createdAt: "desc" }, take: 5, include: { user: { select: { name: true } } } },
@@ -160,7 +169,7 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
                 )}
               </div>
               <p style={{ fontSize: 13, color: "var(--color-admin-text-secondary)", marginTop: 3, marginBottom: 0 }}>
-                {getPropertyTypeLabel(property.type)} • {property.area.parent ? `${property.area.name}, ${property.area.parent.name}` : property.area.name}
+                {getPropertyTypeLabel(property.type)} • {property.village ? `${property.village.name}, ` : ""}{property.area.parent ? `${property.area.name}, ${property.area.parent.name}` : property.area.name}
               </p>
             </div>
           </div>

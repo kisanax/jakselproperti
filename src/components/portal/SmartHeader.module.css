@@ -1,0 +1,202 @@
+/* ==========================================================================
+   SmartHeader.module.css — Airbnb Header UX (2 Rows Top ↔ 1 Compact Row Scrolled)
+   Zero-Flicker Architecture with Hysteresis & Absolute Centered Pill
+   ========================================================================== */
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  width: 100%;
+  background-color: #ffffff;
+  border-bottom: 1px solid #eeeae3;
+  transition: background-color 0.3s cubic-bezier(0.2, 0, 0, 1),
+    backdrop-filter 0.3s cubic-bezier(0.2, 0, 0, 1),
+    -webkit-backdrop-filter 0.3s cubic-bezier(0.2, 0, 0, 1),
+    box-shadow 0.3s cubic-bezier(0.2, 0, 0, 1),
+    border-color 0.3s cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* ─── Frosted Glass on Scroll (Airbnb Extra-Thick Material) ─── */
+.header[data-at-scroll-top="false"] {
+  background-color: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(16px) saturate(1.6);
+  -webkit-backdrop-filter: blur(16px) saturate(1.6);
+  box-shadow: 0 1px 3px color-mix(in srgb, #222222 5%, transparent),
+              0 6px 20px color-mix(in srgb, #222222 8%, transparent);
+  border-bottom-color: rgba(238, 234, 227, 0.7);
+}
+
+/* ─── ROW 1: Top Bar (Logo | Center Compact Pill | Profile/Nav) ─── */
+.topBar {
+  position: relative;
+  width: min(1480px, calc(100% - 80px));
+  min-height: 80px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: min-height 0.3s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.header[data-at-scroll-top="false"] .topBar {
+  min-height: 68px;
+}
+
+.header[data-search-open="true"] .topBar {
+  min-height: 80px;
+}
+
+/* Left: Logo */
+.logoCol {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  z-index: 2;
+}
+
+/* Right: Navigation / Profile */
+.navCol {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  z-index: 2;
+}
+
+/* Center: Compact Search Pill (Always centered, appears on scroll) */
+.searchPill {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform: translate(-50%, calc(-50% + 10px)) scale(0.88);
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  line-height: 0;
+  transition: transform 260ms cubic-bezier(0.2, 0, 0, 1),
+    opacity 180ms cubic-bezier(0.2, 0, 0, 1),
+    visibility 0s 260ms;
+}
+
+.header[data-at-scroll-top="false"] .searchPill {
+  transform: translate(-50%, -50%) scale(1);
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+  transition: transform 420ms linear(
+      0, 0.171, 0.479, 0.750, 0.926,
+      1.015, 1.044, 1.042, 1.029,
+      1.015, 1.005, 1
+    ),
+    opacity 240ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.header[data-search-open="true"] .searchPill {
+  transform: translate(-50%, calc(-50% + 10px)) scale(0.88);
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+/* ─── ROW 2: Expanded Search Bar (Visible at top, collapses on scroll) ─── */
+.searchRow {
+  width: min(1480px, calc(100% - 80px));
+  margin: 0 auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 76px;
+  opacity: 1;
+  transform: translateY(0);
+  padding-bottom: 16px;
+  overflow: visible;
+  pointer-events: auto;
+  transition: height 320ms cubic-bezier(0.2, 0, 0, 1),
+    opacity 200ms cubic-bezier(0.2, 0, 0, 1),
+    transform 320ms cubic-bezier(0.2, 0, 0, 1),
+    padding 320ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.header[data-at-scroll-top="false"] .searchRow {
+  height: 0;
+  opacity: 0;
+  transform: translateY(-16px) scale(0.96);
+  padding-bottom: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.header[data-search-open="true"] .searchRow {
+  height: 76px;
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  padding-bottom: 16px;
+  overflow: visible;
+  pointer-events: auto;
+}
+
+.searchExpanded {
+  width: 100%;
+  max-width: 820px;
+  display: flex;
+  justify-content: center;
+}
+
+/* ─── Responsive Adjustments ─── */
+@media (max-width: 1050px) {
+  .topBar {
+    width: 100%;
+    padding: 0 16px;
+    min-height: 60px;
+  }
+
+  .header[data-at-scroll-top="false"] .topBar {
+    min-height: 54px;
+  }
+
+  .searchRow {
+    width: 100%;
+    padding: 0 16px 10px;
+  }
+
+  .searchExpanded {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .topBar {
+    display: none;
+  }
+
+  .searchPill {
+    display: none;
+  }
+
+  .searchRow,
+  .header[data-at-scroll-top="false"] .searchRow,
+  .header[data-search-open="true"] .searchRow {
+    width: 100%;
+    height: auto;
+    min-height: 78px;
+    padding: 10px 16px;
+    opacity: 1;
+    overflow: visible;
+    pointer-events: auto;
+    transform: none;
+  }
+
+  .header[data-at-scroll-top="false"] {
+    box-shadow: 0 3px 16px rgba(34, 34, 34, 0.08);
+  }
+}

@@ -11,20 +11,25 @@
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:seed": "prisma db seed",
+    "db:import-wilayah": "tsx prisma/import-wilayah.ts",
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset",
-    "r2:test": "node --env-file=.env.local scripts/test-r2.mjs"
+    "r2:test": "node --env-file=.env.local scripts/test-r2.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@auth/prisma-adapter": "^2.11.3",
     "@aws-sdk/client-s3": "^3.1128.0",
     "@hookform/resolvers": "^5.9.1",
     "@prisma/client": "^6.19.3",
     "date-fns": "^4.4.0",
     "lucide-react": "^1.41.0",
     "next": "16.3.4",
+    "next-auth": "^5.0.0-beta.32",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-dropzone": "^20.1.1",
@@ -43,6 +48,7 @@
     "prisma": "^6.19.3",
     "tailwindcss": "^4",
     "tsx": "^4.23.13",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.7"
   }
 }

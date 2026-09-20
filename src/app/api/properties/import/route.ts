@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireOperationalUser } from "@/lib/api-auth";
 import { PropertyImportRow } from "@/lib/csv-parser";
+import {
+  ensurePropertyCodeCounter,
+  nextPropertyCodeInTx,
+} from "@/lib/property-code";
+import { incrementSequenceValue, formatPublicNumber } from "@/lib/sequence-number";
+import { isOperationalStaff } from "@/lib/services/property-listing-access";
 
 // Helper for type mapping
 function mapPropertyType(t?: string): "HOUSE" | "APARTMENT" | "LAND" | "SHOPHOUSE" {
@@ -38,10 +45,20 @@ function parseNum(v?: string | number): number | null {
 }
 
 export async function POST(request: NextRequest) {
+  const guard = await requireOperationalUser();
+  if (guard.error) return guard.error;
+
   try {
     const body = await request.json();
     const rows: PropertyImportRow[] = body.rows || [];
     const defaultStatus = body.defaultStatus || "DRAFT";
+
+    if (defaultStatus !== "DRAFT") {
+      return NextResponse.json(
+        { error: "Import hanya dapat membuat draft. Gunakan alur verifikasi untuk publikasi." },
+        { status: 400 }
+      );
+    }
 
     if (!Array.isArray(rows) || rows.length === 0) {
       return NextResponse.json(
@@ -51,30 +68,24 @@ export async function POST(request: NextRequest) {
     }
 
     // Load reference areas and kawasan
+    // Level 3 = kecamatan nasional; parent (kab/kota) untuk disambiguasi
+    // kecamatan bernama sama antar daerah; officialCode untuk kode properti.
     const [areas, kawasanList] = await Promise.all([
       prisma.area.findMany({
-        where: { level: 1, isActive: true },
-        select: { id: true, name: true, slug: true },
+        where: { level: 3, isActive: true },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          officialCode: true,
+          parent: { select: { name: true } },
+        },
       }),
       prisma.kawasan.findMany({
         where: { isActive: true },
         select: { id: true, name: true, slug: true, areaId: true },
       }),
     ]);
-
-    // Find highest JS-xxxx code to increment for empty codes
-    const existingCodes = await prisma.property.findMany({
-      select: { code: true },
-    });
-
-    let currentMaxNum = 0;
-    existingCodes.forEach((p) => {
-      const match = p.code.match(/JS-(\d+)/i);
-      if (match) {
-        const n = parseInt(match[1]);
-        if (n > currentMaxNum) currentMaxNum = n;
-      }
-    });
 
     const createdProperties: { id: string; code: string; address: string }[] = [];
     const errors: { row: number; error: string; code?: string }[] = [];
@@ -95,49 +106,78 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        // Match Area
+        // Match Area — kecamatan nasional; nama bisa kembar antar kota,
+        // jadi kolom kota (opsional) dipakai untuk disambiguasi.
         const kecClean = row.kecamatan.trim().toLowerCase();
-        const matchedArea = areas.find(
+        let candidates = areas.filter(
           (a) =>
             a.name.toLowerCase().includes(kecClean) ||
             kecClean.includes(a.name.toLowerCase()) ||
             a.slug.toLowerCase().includes(kecClean)
         );
 
-        if (!matchedArea) {
+        if (row.kota && row.kota.trim()) {
+          const kotaClean = row.kota.trim().toLowerCase();
+          candidates = candidates.filter(
+            (a) => a.parent?.name?.toLowerCase().includes(kotaClean)
+          );
+        }
+
+        let matchedArea: (typeof areas)[number] | null = null;
+        if (candidates.length === 1) {
+          matchedArea = candidates[0];
+        } else if (candidates.length > 1) {
           errors.push({
             row: rowNum,
-            error: `Kecamatan "${row.kecamatan}" tidak ditemukan di daftar 10 Kecamatan Jakarta Selatan.`,
+            error: `Kecamatan "${row.kecamatan}" ditemukan di ${candidates.length} kota — isi kolom "kota" untuk memperjelas (contoh: ${candidates[0].parent?.name}).`,
           });
           continue;
         }
 
-        // Match Kawasan (optional)
+        if (!matchedArea) {
+          errors.push({
+            row: rowNum,
+            error: `Kecamatan "${row.kecamatan}" tidak ditemukan. Pastikan penulisan nama kecamatan benar${row.kota ? " dan sesuai kota" : " — atau isi kolom kota"}.`,
+          });
+          continue;
+        }
+
+        // Match Kawasan (optional) — kawasan TIDAK memengaruhi kode properti,
+        // hanya tersimpan sebagai atribut (badge/label UI).
         let matchedKawasanId: string | null = null;
         if (row.kawasan && row.kawasan.trim()) {
           const kawClean = row.kawasan.trim().toLowerCase();
-          const matchedKawasan = kawasanList.find(
+          const found = kawasanList.find(
             (k) =>
               k.name.toLowerCase().includes(kawClean) ||
               kawClean.includes(k.name.toLowerCase())
           );
-          if (matchedKawasan) {
-            matchedKawasanId = matchedKawasan.id;
+          if (found) {
+            matchedKawasanId = found.id;
           }
         }
 
-        // Determine Code
-        let code = row.kode?.trim();
-        if (!code) {
-          currentMaxNum++;
-          code = `JS-${currentMaxNum.toString().padStart(4, "0")}`;
-        } else {
-          // Check if code already exists
+        // Pastikan counter kode per-kecamatan sudah ada (di-seed dari max
+        // existing) SEBELUM loop transaksi — per AGENTS.md: increment
+        // harus atomic di dalam transaction, bukan MAX+1 di memori.
+        const codeCounter = await ensurePropertyCodeCounter(
+          prisma,
+          matchedArea.officialCode
+        );
+        if (!codeCounter) {
+          errors.push({
+            row: rowNum,
+            error: `Kecamatan "${row.kecamatan}" tidak punya kode wilayah resmi — tidak bisa membuat kode properti.`,
+          });
+          continue;
+        }
+
+        // Determine Code — kode manual dipakai apa adanya bila belum dipakai;
+        // selain itu ambil running number atomic per-kecamatan.
+        let code: string | null = row.kode?.trim() || null;
+        if (code) {
           const exists = await prisma.property.findUnique({ where: { code } });
-          if (exists) {
-            currentMaxNum++;
-            code = `JS-${currentMaxNum.toString().padStart(4, "0")}`;
-          }
+          if (exists) code = null; // sudah dipakai → generate baru
         }
 
         // Parse Specs
@@ -151,10 +191,17 @@ export async function POST(request: NextRequest) {
 
         // Transaction for this property
         const newProp = await prisma.$transaction(async (tx) => {
+          const finalCode =
+            code ?? (await nextPropertyCodeInTx(tx, codeCounter));
+
           // 1. Create Property
+          const propertyNumber = formatPublicNumber(
+            await incrementSequenceValue(tx, "property")
+          );
           const prop = await tx.property.create({
             data: {
-              code: code as string,
+              code: finalCode,
+              propertyNumber,
               type: mapPropertyType(row.tipe),
               areaId: matchedArea.id,
               kawasanId: matchedKawasanId,
@@ -202,8 +249,8 @@ export async function POST(request: NextRequest) {
             });
           }
 
-          // 3. Create Initial Listing if price is provided
-          if (askingPrice && askingPrice > 0) {
+          // 3. Broker properties always need an owned draft to remain in scope.
+          if ((askingPrice && askingPrice > 0) || !isOperationalStaff(guard.actor)) {
             const typeLabel = {
               HOUSE: "Rumah",
               APARTMENT: "Apartemen",
@@ -211,15 +258,29 @@ export async function POST(request: NextRequest) {
               SHOPHOUSE: "Ruko",
             }[prop.type];
 
-            await tx.listing.create({
+            const listing = await tx.listing.create({
               data: {
                 propertyId: prop.id,
-                status: defaultStatus as "DRAFT" | "ACTIVE",
-                askingPrice,
+                listingNumber: formatPublicNumber(
+                  await incrementSequenceValue(tx, "listing")
+                ),
+                managedById: guard.actor.userId,
+                status: "DRAFT",
+                askingPrice: askingPrice || 0,
                 title: `${typeLabel} Dijual di ${matchedArea.name}`,
                 description: row.catatan_internal?.trim() || null,
                 showFullAddress: false,
                 priceOnRequest: false,
+              },
+            });
+
+            await tx.listingStatusHistory.create({
+              data: {
+                listingId: listing.id,
+                fromStatus: null,
+                toStatus: "DRAFT",
+                changedBy: guard.actor.userId,
+                reason: "Listing dibuat melalui import CSV",
               },
             });
           }

@@ -1,9 +1,14 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import Script from "next/script";
+import { redirect } from "next/navigation";
+import { prisma } from "@/lib/prisma";
+import { getAccountAccess } from "@/lib/broker-workspace-access";
+import { getAccessibleModules } from "@/lib/module-access";
 import AdminShell from "./AdminShell";
 import PWARegister from "./PWARegister";
 import "./admin.css";
+import "@/components/admin-ui/admin-ui.css";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -37,7 +42,15 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  const access = await getAccountAccess();
+  if (access.kind === "unauthenticated") redirect("/login");
+  if (access.kind === "member") redirect("/akun");
+  if (access.kind === "broker-incomplete" || access.kind === "broker-revision") redirect("/onboarding");
+  if (access.kind === "broker-pending" || access.kind === "broker-rejected" || access.kind === "broker-suspended") redirect("/onboarding/status");
+
+  const accessible = await getAccessibleModules(prisma, access.user.platformRole);
+
   return (
     <>
       <Script
@@ -47,7 +60,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           __html: `
             try {
               var t = localStorage.getItem('admin-theme');
-              var theme = (t === 'light' || t === 'dark') ? t : 'dark';
+              var theme = (t === 'light' || t === 'dark') ? t : 'light';
               document.documentElement.setAttribute('data-theme', theme);
               if (document.body) document.body.setAttribute('data-theme', theme);
             } catch(e) {}
@@ -55,7 +68,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         }}
       />
       <div className={`admin-layout ${inter.variable}`} style={{ fontFamily: "var(--font-admin)" }} suppressHydrationWarning>
-        <AdminShell>{children}</AdminShell>
+        <AdminShell
+          platformRole={access.user.platformRole}
+          accessibleModules={[...accessible]}
+        >
+          {children}
+        </AdminShell>
         <PWARegister />
       </div>
     </>

@@ -4,13 +4,14 @@ import { prisma } from "@/lib/prisma";
 // GET /api/kawasan — List all kawasan
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
-  const areaId = searchParams.get("areaId");
+  const areaIdParam = searchParams.get("areaId");
   const isFeatured = searchParams.get("featured");
 
   const where: Record<string, unknown> = { isActive: true };
 
-  if (areaId) {
-    where.areaId = areaId;
+  if (areaIdParam) {
+    const areaId = Number(areaIdParam);
+    if (Number.isInteger(areaId)) where.areaId = areaId;
   }
 
   if (isFeatured !== null && isFeatured !== undefined) {
@@ -54,6 +55,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // areaId datang sebagai string dari form — Area.id sekarang Int.
+    const areaId = Number(body.areaId);
+    if (!Number.isInteger(areaId)) {
+      return NextResponse.json({ error: "areaId tidak valid" }, { status: 400 });
+    }
+
+    // Kawasan hanya boleh terhubung ke kecamatan (level 3)
+    const parentArea = await prisma.area.findUnique({
+      where: { id: areaId },
+      select: { id: true, level: true },
+    });
+    if (!parentArea || parentArea.level !== 3) {
+      return NextResponse.json(
+        { error: "Kecamatan induk tidak valid — kawasan hanya boleh terhubung ke kecamatan." },
+        { status: 400 }
+      );
+    }
+
     const slug =
       body.slug?.trim() ||
       body.name
@@ -74,7 +93,7 @@ export async function POST(request: NextRequest) {
       data: {
         name: body.name.trim(),
         slug,
-        areaId: body.areaId,
+        areaId,
         tagline: body.tagline?.trim() || null,
         bannerImage: body.bannerImage?.trim() || null,
         isFeatured: Boolean(body.isFeatured),

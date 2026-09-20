@@ -36,7 +36,7 @@ export interface ParsedPropertyData {
 }
 
 interface AreaRef {
-  id: string;
+  id: number;
   name: string;
   slug: string;
 }
@@ -45,7 +45,7 @@ interface KawasanRef {
   id: string;
   name: string;
   slug: string;
-  areaId: string;
+  areaId: number;
 }
 
 /**
@@ -83,10 +83,10 @@ async function callGeminiParser(
   const areaSlugs = areas.map((a) => `${a.slug} (${a.name})`).join(", ");
   const kawasanSlugs = kawasanList.map((k) => `${k.slug} (${k.name})`).join(", ");
 
-  const systemInstruction = `Anda adalah asisten cerdas parser teks properti di Jakarta Selatan.
+  const systemInstruction = `Anda adalah asisten cerdas parser teks properti wilayah Jabodetabek.
 Tugas Anda adalah membaca pesan teks iklan/broadcast WhatsApp properti yang berantakan, menormalisasi data, dan mengembalikan JSON terstruktur.
 
-Daftar Kecamatan Resmi Jakarta Selatan yang tersedia:
+Daftar Kecamatan Jabodetabek yang tersedia:
 [${areaSlugs}]
 
 Daftar Kawasan Populer yang tersedia:
@@ -94,7 +94,7 @@ Daftar Kawasan Populer yang tersedia:
 
 Aturan Ekstraksi:
 - Tentukan type: HOUSE (Rumah), APARTMENT (Apartemen), LAND (Tanah), SHOPHOUSE (Ruko).
-- areaSlug HARUS merupakan salah satu dari slug kecamatan yang tersedia. Jika ada kata Cipete Selatan/Gandaria Selatan/Cilandak, pilih 'cilandak'. Jika Senopati/Gunung/Melawai, pilih 'kebayoran-baru'. Jika Kemang/Bangka, pilih 'mampang-prapatan'. Jika Pondok Indah, pilih 'kebayoran-lama'.
+- areaSlug HARUS merupakan salah satu dari slug kecamatan yang tersedia di daftar. Jika tidak ada yang cocok dengan wilayah pesan, set null. Jika ada kata Cipete Selatan/Gandaria Selatan/Cilandak, pilih 'cilandak'. Jika Senopati/Gunung/Melawai, pilih 'kebayoran-baru'. Jika Kemang/Bangka, pilih 'mampang-prapatan'. Jika Pondok Indah, pilih 'kebayoran-lama'.
 - kawasanSlug: pilih slug kawasan populer jika cocok (misal 'cipete', 'kemang', 'pondok-indah', 'senopati'), jika tidak ada yang cocok set null.
 - askingPrice: WAJIB angka murni Rupiah (integer). Contoh: '12,5 M' atau '12.5 Miliar' = 12500000000. '850 jt' = 850000000.
 - bedrooms dan bathrooms: angka kamar utama. Jika format '3+1', maka bedrooms = 3, maidBedrooms = 1.

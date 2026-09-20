@@ -1,17 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { LeadStage } from "@prisma/client";
+import { requireOperationalUser } from "@/lib/api-auth";
+import { combineListingFilters } from "@/lib/services/property-listing-access";
 
 // GET /api/leads/[id] — Get detail lead
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const guard = await requireOperationalUser();
+  if (guard.error) return guard.error;
   const { id } = await params;
 
   try {
-    const lead = await prisma.lead.findUnique({
-      where: { id },
+    const lead = await prisma.lead.findFirst({
+      where: { id, listing: combineListingFilters(guard.actor, {}) },
       include: {
         customer: true,
         listing: {
@@ -59,13 +63,15 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const guard = await requireOperationalUser();
+  if (guard.error) return guard.error;
   const { id } = await params;
 
   try {
     const body = await request.json();
 
-    const existingLead = await prisma.lead.findUnique({
-      where: { id },
+    const existingLead = await prisma.lead.findFirst({
+      where: { id, listing: combineListingFilters(guard.actor, {}) },
     });
 
     if (!existingLead) {
@@ -83,11 +89,6 @@ export async function PUT(
     if (body.currentStage) data.currentStage = body.currentStage;
     if (body.notes !== undefined) data.notes = body.notes;
     if (body.priority !== undefined) data.priority = Number(body.priority);
-
-    // Get admin user for activity logging
-    const admin = await prisma.user.findFirst({
-      where: { email: "admin@jakselproperti.com" },
-    });
 
     const updatedLead = await prisma.$transaction(async (tx) => {
       const lead = await tx.lead.update({
@@ -110,11 +111,11 @@ export async function PUT(
       });
 
       // Record stage change in LeadActivity (Section 15.4)
-      if (isStageChanged && admin) {
+      if (isStageChanged) {
         await tx.leadActivity.create({
           data: {
             leadId: id,
-            userId: admin.id,
+            userId: guard.actor.userId,
             type: "STAGE_CHANGE",
             fromStage: existingLead.currentStage,
             toStage: body.currentStage,
@@ -123,12 +124,12 @@ export async function PUT(
               `Perpindahan stage dari ${existingLead.currentStage} ke ${body.currentStage}`,
           },
         });
-      } else if (body.newActivity && admin) {
+      } else if (body.newActivity) {
         // Log generic activity like call, whatsapp, note
         await tx.leadActivity.create({
           data: {
             leadId: id,
-            userId: admin.id,
+            userId: guard.actor.userId,
             type: body.newActivity.type || "NOTE",
             fromStage: existingLead.currentStage,
             toStage: existingLead.currentStage,

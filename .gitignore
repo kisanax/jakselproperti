@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+/.npm-cache
 /.pnp
 .pnp.*
 .yarn/*
@@ -45,3 +46,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# scratch & backup
+/scratch/
+/.kilo/
+backup.sql

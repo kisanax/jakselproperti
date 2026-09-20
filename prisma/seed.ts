@@ -1,4 +1,6 @@
 import { PrismaClient } from "@prisma/client";
+import { hashPassword } from "../src/lib/password";
+import { MODULES, MODULE_DEFAULTS } from "../src/lib/module-access";
 
 const prisma = new PrismaClient();
 
@@ -9,6 +11,7 @@ const areasData = [
   {
     name: "Cilandak",
     slug: "cilandak",
+    code: "CLD",
     children: [
       { name: "Cilandak Barat", slug: "cilandak-barat" },
       { name: "Cipete Selatan", slug: "cipete-selatan" },
@@ -20,6 +23,7 @@ const areasData = [
   {
     name: "Jagakarsa",
     slug: "jagakarsa",
+    code: "JGK",
     children: [
       { name: "Ciganjur", slug: "ciganjur" },
       { name: "Jagakarsa", slug: "jagakarsa-kel" },
@@ -32,6 +36,7 @@ const areasData = [
   {
     name: "Kebayoran Baru",
     slug: "kebayoran-baru",
+    code: "KBB",
     children: [
       { name: "Cipete Utara", slug: "cipete-utara" },
       { name: "Gandaria Utara", slug: "gandaria-utara" },
@@ -48,6 +53,7 @@ const areasData = [
   {
     name: "Kebayoran Lama",
     slug: "kebayoran-lama",
+    code: "KBL",
     children: [
       { name: "Cipulir", slug: "cipulir" },
       { name: "Grogol Selatan", slug: "grogol-selatan" },
@@ -60,6 +66,7 @@ const areasData = [
   {
     name: "Mampang Prapatan",
     slug: "mampang-prapatan",
+    code: "MPP",
     children: [
       { name: "Bangka", slug: "bangka" },
       { name: "Kuningan Barat", slug: "kuningan-barat" },
@@ -71,6 +78,7 @@ const areasData = [
   {
     name: "Pancoran",
     slug: "pancoran",
+    code: "PCR",
     children: [
       { name: "Cikoko", slug: "cikoko" },
       { name: "Duren Tiga", slug: "duren-tiga" },
@@ -83,6 +91,7 @@ const areasData = [
   {
     name: "Pasar Minggu",
     slug: "pasar-minggu",
+    code: "PSM",
     children: [
       { name: "Cilandak Timur", slug: "cilandak-timur" },
       { name: "Jati Padang", slug: "jati-padang" },
@@ -96,6 +105,7 @@ const areasData = [
   {
     name: "Pesanggrahan",
     slug: "pesanggrahan",
+    code: "PSG",
     children: [
       { name: "Bintaro", slug: "bintaro" },
       { name: "Pesanggrahan", slug: "pesanggrahan-kel" },
@@ -105,6 +115,7 @@ const areasData = [
   {
     name: "Setiabudi",
     slug: "setiabudi",
+    code: "STB",
     children: [
       { name: "Guntur", slug: "guntur" },
       { name: "Karet", slug: "karet" },
@@ -119,6 +130,7 @@ const areasData = [
   {
     name: "Tebet",
     slug: "tebet",
+    code: "TBT",
     children: [
       { name: "Bukit Duri", slug: "bukit-duri" },
       { name: "Kebon Baru", slug: "kebon-baru" },
@@ -138,6 +150,7 @@ const kawasanData = [
   {
     name: "Kemang",
     slug: "kemang",
+    code: "KMG",
     areaSlug: "mampang-prapatan",
     tagline: "Pusat gaya hidup & ekspat favorit Jakarta Selatan",
     bannerImage: "/images/kawasan/kemang.webp",
@@ -147,6 +160,7 @@ const kawasanData = [
   {
     name: "Pondok Indah",
     slug: "pondok-indah",
+    code: "PDI",
     areaSlug: "kebayoran-lama",
     tagline: "Hunian prestisius & elite paling ikonik",
     bannerImage: "/images/kawasan/pondok-indah.webp",
@@ -156,6 +170,7 @@ const kawasanData = [
   {
     name: "Senopati & SCBD",
     slug: "senopati",
+    code: "SNP",
     areaSlug: "kebayoran-baru",
     tagline: "Kawasan premium di jantung bisnis & kuliner Jakarta",
     bannerImage: "/images/kawasan/senopati.webp",
@@ -165,6 +180,7 @@ const kawasanData = [
   {
     name: "Cilandak",
     slug: "cilandak-kawasan",
+    code: "CLD",
     areaSlug: "cilandak",
     tagline: "Hunian asri dengan akses tol TB Simatupang & sekolah internasional",
     bannerImage: "/images/kawasan/cilandak.webp",
@@ -174,6 +190,7 @@ const kawasanData = [
   {
     name: "Cipete",
     slug: "cipete",
+    code: "CPT",
     areaSlug: "cilandak",
     tagline: "Kawasan kuliner hits dengan nuansa residensial tenang",
     bannerImage: "/images/kawasan/cipete.webp",
@@ -183,6 +200,7 @@ const kawasanData = [
   {
     name: "Tebet",
     slug: "tebet-kawasan",
+    code: "TBT",
     areaSlug: "tebet",
     tagline: "Kawasan strategis dengan akses mudah ke pusat Jakarta",
     bannerImage: "/images/kawasan/tebet.webp",
@@ -249,29 +267,73 @@ async function main() {
   console.log("🌱 Seeding database jakselproperti (Blueprint v0.3)...\n");
 
   // -------------------------------------------------------------------------
-  // 1. Seed Areas (10 Kecamatan + Kelurahan)
+  // 0. Seed Sequence Counters (penomoran publik Property & Listing)
   // -------------------------------------------------------------------------
-  console.log("📍 Seeding areas (10 kecamatan & 65 kelurahan)...");
+  console.log("🔢 Seeding sequence counters...");
+
+  await prisma.sequenceCounter.upsert({
+    where: { name: "property" },
+    update: {},
+    create: { name: "property", currentValue: 100000 },
+  });
+
+  await prisma.sequenceCounter.upsert({
+    where: { name: "listing" },
+    update: {},
+    create: { name: "listing", currentValue: 500000 },
+  });
+
+  console.log("   ✅ Sequence counters initialized (property: 100000, listing: 500000)\n");
+
+  // -------------------------------------------------------------------------
+  // 1. Seed Areas (hierarki Kemendagri: DKI → Kota Adm. Jaksel → kecamatan → kelurahan)
+  // -------------------------------------------------------------------------
+  console.log("📍 Seeding areas (DKI Jakarta → Jakarta Selatan → 10 kecamatan & 65 kelurahan)...");
+
+  const provinsiDki = await prisma.area.upsert({
+    where: { slug: "dki-jakarta" },
+    update: { officialCode: "31" },
+    create: {
+      name: "DKI Jakarta",
+      slug: "dki-jakarta",
+      officialCode: "31",
+      level: 1,
+    },
+  });
+
+  const kotaJaksel = await prisma.area.upsert({
+    where: { slug: "kota-administrasi-jakarta-selatan" },
+    update: { officialCode: "31.74" },
+    create: {
+      name: "Kota Administrasi Jakarta Selatan",
+      slug: "kota-administrasi-jakarta-selatan",
+      officialCode: "31.74",
+      level: 2,
+      parentId: provinsiDki.id,
+    },
+  });
 
   for (const kecamatan of areasData) {
     const parent = await prisma.area.upsert({
       where: { slug: kecamatan.slug },
-      update: {},
+      update: { code: kecamatan.code, level: 3, parentId: kotaJaksel.id },
       create: {
         name: kecamatan.name,
         slug: kecamatan.slug,
-        level: 1,
+        code: kecamatan.code,
+        level: 3,
+        parentId: kotaJaksel.id,
       },
     });
 
     for (const kelurahan of kecamatan.children) {
       await prisma.area.upsert({
         where: { slug: kelurahan.slug },
-        update: {},
+        update: { level: 4 },
         create: {
           name: kelurahan.name,
           slug: kelurahan.slug,
-          level: 2,
+          level: 4,
           parentId: parent.id,
         },
       });
@@ -279,7 +341,7 @@ async function main() {
   }
 
   const totalAreas = await prisma.area.count();
-  console.log(`   ✅ ${totalAreas} areas created (10 kecamatan + kelurahan)\n`);
+  console.log(`   ✅ ${totalAreas} areas created (DKI + Kota Adm. Jaksel + 10 kecamatan + kelurahan)\n`);
 
   // -------------------------------------------------------------------------
   // 2. Seed Kawasan Populer (Blueprint v0.3 Section 15.3)
@@ -295,6 +357,7 @@ async function main() {
       await prisma.kawasan.upsert({
         where: { slug: k.slug },
         update: {
+          code: k.code,
           tagline: k.tagline,
           bannerImage: k.bannerImage,
           isFeatured: k.isFeatured,
@@ -303,6 +366,7 @@ async function main() {
         create: {
           name: k.name,
           slug: k.slug,
+          code: k.code,
           areaId: area.id,
           tagline: k.tagline,
           bannerImage: k.bannerImage,
@@ -342,17 +406,126 @@ async function main() {
   // -------------------------------------------------------------------------
   console.log("👤 Seeding default admin user...");
 
+  // DEV-ONLY password — ganti sebelum produksi
+  const adminPassword = await hashPassword("jaksel-admin-2026");
+
   const admin = await prisma.user.upsert({
     where: { email: "admin@jakselproperti.com" },
     update: {},
     create: {
       email: "admin@jakselproperti.com",
       name: "Admin",
-      password: "$2b$10$placeholder", // akan diganti saat auth diimplementasi
+      password: adminPassword,
+      platformRole: "SUPER_ADMIN",
     },
   });
 
   console.log("   ✅ Default admin created (admin@jakselproperti.com)\n");
+
+  // -------------------------------------------------------------------------
+  // 4a. Seed Demo Support User (tier staff: lihat & edit, tanpa kelola user)
+  // -------------------------------------------------------------------------
+  console.log("👤 Seeding demo support user...");
+
+  const supportPassword = await hashPassword("jaksel-support-2026");
+
+  await prisma.user.upsert({
+    where: { email: "support@jakselproperti.com" },
+    update: {},
+    create: {
+      email: "support@jakselproperti.com",
+      name: "Support Dini",
+      password: supportPassword,
+      platformRole: "SUPPORT",
+    },
+  });
+
+  console.log("   ✅ Demo support created (support@jakselproperti.com)\n");
+
+  // -------------------------------------------------------------------------
+  // 4b. Seed Demo Member User (akun portal publik, bukan broker)
+  // -------------------------------------------------------------------------
+  console.log("👤 Seeding demo member user...");
+
+  const memberPassword = await hashPassword("jaksel-member-2026");
+
+  await prisma.user.upsert({
+    where: { email: "member@jakselproperti.com" },
+    update: {},
+    create: {
+      email: "member@jakselproperti.com",
+      name: "Member Demo",
+      password: memberPassword,
+      platformRole: "MEMBER",
+    },
+  });
+
+  console.log("   ✅ Demo member created (member@jakselproperti.com)\n");
+
+  // -------------------------------------------------------------------------
+  // 4c. Seed Matriks Akses Modul default (role × modul)
+  // -------------------------------------------------------------------------
+  console.log("🔐 Seeding default module access matrix...");
+
+  const roles = ["SUPER_ADMIN", "SUPPORT", "BROKER"] as const;
+  await prisma.roleModuleAccess.deleteMany({
+    where: { moduleKey: { notIn: MODULES.map((moduleDef) => moduleDef.key) } },
+  });
+  for (const moduleDef of MODULES) {
+    for (const role of roles) {
+      await prisma.roleModuleAccess.upsert({
+        where: { role_moduleKey: { role, moduleKey: moduleDef.key } },
+        update: { enabled: MODULE_DEFAULTS[moduleDef.key].includes(role) },
+        create: {
+          role,
+          moduleKey: moduleDef.key,
+          enabled: MODULE_DEFAULTS[moduleDef.key].includes(role),
+        },
+      });
+    }
+  }
+
+  console.log("   ✅ Module access matrix seeded\n");
+
+  // -------------------------------------------------------------------------
+  // 4b. Seed Demo Broker Terverifikasi (untuk halaman publik /agents)
+  // -------------------------------------------------------------------------
+  console.log("👤 Seeding demo broker terverifikasi...");
+  const brokerPassword = await hashPassword("jaksel-broker-2026");
+
+  const demoBroker = await prisma.user.upsert({
+    where: { email: "sarah@jakselproperti.com" },
+    update: { password: brokerPassword },
+    create: {
+      email: "sarah@jakselproperti.com",
+      name: "Sarah Wijaya",
+      password: brokerPassword,
+      platformRole: "BROKER",
+    },
+  });
+
+  await prisma.brokerProfile.upsert({
+    where: { userId: demoBroker.id },
+    update: {
+      verificationStatus: "VERIFIED",
+      onboardingCompletedAt: new Date(),
+      brokerType: "INDEPENDENT",
+      phone: "08123456789",
+      city: "Jakarta Selatan",
+      province: "DKI Jakarta",
+    },
+    create: {
+      userId: demoBroker.id,
+      verificationStatus: "VERIFIED",
+      onboardingCompletedAt: new Date(),
+      brokerType: "INDEPENDENT",
+      phone: "08123456789",
+      city: "Jakarta Selatan",
+      province: "DKI Jakarta",
+    },
+  });
+
+  console.log("   ✅ Demo broker created (sarah@jakselproperti.com, VERIFIED)\n");
 
   // -------------------------------------------------------------------------
   // 5. Seed Sample Data (Property + Kawasan + Customer + Lead Kanban)
@@ -369,10 +542,10 @@ async function main() {
   if (mampangArea && kebayoranLamaArea && kebayoranBaruArea) {
     // Sample Property 1
     const prop1 = await prisma.property.upsert({
-      where: { code: "JS-0001" },
+      where: { code: "317403-0001" },
       update: {},
       create: {
-        code: "JS-0001",
+        code: "317403-0001",
         type: "HOUSE",
         areaId: mampangArea.id,
         kawasanId: kemangKawasan?.id || null,
@@ -399,6 +572,7 @@ async function main() {
       create: {
         id: "sample-listing-1",
         propertyId: prop1.id,
+        managedById: admin.id,
         status: "ACTIVE",
         askingPrice: 8500000000,
         minimumPrice: 7800000000,
@@ -413,10 +587,10 @@ async function main() {
 
     // Sample Property 2
     const prop2 = await prisma.property.upsert({
-      where: { code: "JS-0002" },
+      where: { code: "317405-0001" },
       update: {},
       create: {
-        code: "JS-0002",
+        code: "317405-0001",
         type: "HOUSE",
         areaId: kebayoranLamaArea.id,
         kawasanId: pondokIndahKawasan?.id || null,
@@ -442,6 +616,7 @@ async function main() {
       create: {
         id: "sample-listing-2",
         propertyId: prop2.id,
+        managedById: admin.id,
         status: "DRAFT",
         askingPrice: 15000000000,
         priceOnRequest: true,
@@ -454,10 +629,10 @@ async function main() {
 
     // Sample Property 3 — Tanah
     await prisma.property.upsert({
-      where: { code: "JS-0003" },
+      where: { code: "317407-0001" },
       update: {},
       create: {
-        code: "JS-0003",
+        code: "317407-0001",
         type: "LAND",
         areaId: kebayoranBaruArea.id,
         address: "Jl. Senopati No.88, RT 007/RW 003",

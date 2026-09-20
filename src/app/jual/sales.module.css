@@ -1,0 +1,639 @@
+/* ==========================================================================
+   /jual — Katalog Properti Dijual
+   Adapted from William Raveis Nantucket /buy — tanpa peta (Blueprint §10)
+
+   TYPOGRAPHY SPEC (per Blueprint inspeksi referensi):
+   ┌──────────────────────────────┬──────────────┬────────┬──────┬─────────┬───────────────────┐
+   │ Elemen                       │ Font         │ Weight │ Size │ LH      │ Color             │
+   ├──────────────────────────────┼──────────────┼────────┼──────┼─────────┼───────────────────┤
+   │ H1 heading                   │ The Seasons  │ 600    │ 36px │ 40px    │ #222222           │
+   │ Section heading              │ The Seasons  │ 600    │ 22px │ 25px    │ #222222           │
+   │ Paragraf / deskripsi         │ EB Garamond  │ 400    │ 22px │ 31px    │ inherit           │
+   │ Harga & alamat di card       │ EB Garamond  │ 400    │ 16px │ 22px    │ #717171           │
+   │ Navigasi & label filter      │ EB Garamond  │ 400    │ 16px │ 16px    │ #717171           │
+   └──────────────────────────────┴──────────────┴────────┴──────┴─────────┴───────────────────┘
+
+   CSS variables:
+   • var(--font-jakarta)   → heading/body/ui font
+   • var(--font-jakarta)   → body/ui font
+   • var(--paper)    #fffdf9   → page background
+   • var(--ink)      #18352b   → primary text
+   • var(--forest)   #123d2f   → accent dark green
+   • var(--gold)     #c6a464   → eyebrow/badge accent
+   • var(--nav-blue) #5d89b3   → interactive/link accent
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   PAGE SHELL
+   -------------------------------------------------------------------------- */
+.page {
+  background: var(--paper, #fffdf9);
+  color: var(--ink, #18352b);
+  min-height: 100vh;
+  font-family: var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 22px;
+}
+
+.page :global(.site-header) {
+  background: var(--paper, #fffdf9);
+}
+
+.content {
+  width: min(1420px, calc(100% - 56px));
+  margin: 0 auto;
+  font-family: var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+}
+
+/* --------------------------------------------------------------------------
+   FILTER BAR
+   Blueprint spec: EB Garamond 400, 16px/16px, color #717171
+   -------------------------------------------------------------------------- */
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 0;
+  border-top: 1px solid #ece9e1;
+  border-bottom: 1px solid #ece9e1;
+  font-family: var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+}
+
+.filters label {
+  min-width: 0;
+  font-family: var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+}
+
+.filters select,
+.filters input {
+  min-height: 44px;
+  border: 1px solid #e5e3dd;
+  border-radius: 4px;
+  background: #fff;
+  padding: 8px 14px;
+  color: #222222;
+  font: 400 16px/16px var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  max-width: 100%;
+  transition: border-color 0.2s;
+}
+
+.filters select:hover,
+.filters input:hover {
+  border-color: var(--nav-blue, #5d89b3);
+}
+
+.filters select:focus,
+.filters input:focus {
+  border-color: var(--nav-blue, #5d89b3);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(93, 137, 179, 0.15);
+}
+
+.filters select {
+  width: 100%;
+  cursor: pointer;
+}
+
+/* Search field with icon */
+.search {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #717171;
+  font-family: var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+}
+
+.search svg {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+
+.search input {
+  width: 100%;
+  border: 0 !important;
+  padding-left: 0;
+  min-width: 0;
+  box-shadow: none !important;
+  font: 400 16px/16px var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  color: #222222;
+}
+
+.search input::placeholder {
+  color: #717171;
+  font-family: var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  font-size: 16px;
+}
+
+/* Submit button — same 16px base as filter labels */
+.submit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 20px;
+  background: var(--nav-blue, #5d89b3);
+  color: #fff;
+  border: 0;
+  border-radius: 4px;
+  white-space: nowrap;
+  cursor: pointer;
+  font: 400 16px/16px var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  transition: background 0.2s, transform 0.15s;
+}
+
+.submit:hover {
+  background: #4a7599;
+  transform: translateY(-1px);
+}
+
+.submit svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
+/* Reset link — 16px matching filter labels */
+.reset {
+  color: #717171;
+  font: 400 16px/16px var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  padding: 10px 4px;
+  transition: color 0.2s;
+  white-space: nowrap;
+}
+
+.reset:hover {
+  color: var(--nav-blue, #5d89b3);
+}
+
+/* Preview mode banner */
+.preview {
+  font: 400 16px/22px var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  color: #717171;
+  margin: 12px 0;
+}
+
+/* --------------------------------------------------------------------------
+   HEADING SECTION
+   Blueprint spec: Section heading = The Seasons 600, 22px/25px, #222222
+   -------------------------------------------------------------------------- */
+.heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 20px;
+  margin: 32px 0 28px;
+}
+
+/* Blueprint: Section heading — The Seasons 600, 22px/25px, #222222 */
+.heading h1 {
+  font: 600 22px/25px var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif !important;
+  letter-spacing: -0.015em;
+  margin: 0 0 6px;
+  color: #222222;
+}
+
+.eyebrow {
+  display: block;
+  font: 700 11px/14px var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  letter-spacing: 0.18em;
+  color: var(--gold, #c6a464);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+/* Blueprint: Harga & alamat = EB Garamond 400, 16px/22px */
+.heading p {
+  font: 400 16px/22px var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  color: #717171;
+  margin: 0;
+}
+
+/* Subtitle italic — same 16px as nav/filter */
+.heading > span {
+  font: italic 400 16px/22px var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  color: #717171;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   PROPERTY GRID — 4 columns, full-width (no map — Blueprint Referensi 3)
+   -------------------------------------------------------------------------- */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 28px;
+}
+
+/* --------------------------------------------------------------------------
+   PROPERTY CARD
+   Blueprint spec for card text: EB Garamond 400, 16px/22px, #717171
+   -------------------------------------------------------------------------- */
+.card {
+  min-width: 0;
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  border-radius: 10px;
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+}
+
+.card article {
+  background: #fff;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #ece9e1;
+  box-shadow: 0 4px 20px rgba(34, 34, 34, 0.06);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  font-family: var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+}
+
+.card:hover article {
+  transform: translateY(-5px);
+  box-shadow: 0 16px 40px rgba(34, 34, 34, 0.12);
+}
+
+/* Card — Photo */
+.photo {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  background: #eae7df;
+  overflow: hidden;
+}
+
+.photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s ease;
+}
+
+.card:hover .photo img {
+  transform: scale(1.04);
+}
+
+/* Card — Type badge overlay (top-left of photo) */
+/* Blueprint: Nav/filter = EB Garamond 400, 16px — badge smaller at 12px */
+.badge {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  padding: 5px 12px;
+  background: rgba(34, 34, 34, 0.84);
+  color: #fff;
+  font: 600 12px/14px var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  letter-spacing: 0.06em;
+  border-radius: 4px;
+  backdrop-filter: blur(4px);
+  text-transform: uppercase;
+}
+
+/* Card — No photo placeholder */
+.noPhoto {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  color: #b5ad9e;
+  background: linear-gradient(135deg, #eae7df 0%, #d9d4c8 100%);
+  font: 400 16px/22px var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+}
+
+.noPhoto svg {
+  width: 36px;
+  height: 36px;
+  fill: none;
+  stroke: #b5ad9e;
+  stroke-width: 1.2;
+}
+
+/* Card — Info body */
+.info {
+  padding: 18px 20px 20px;
+  font-family: var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+}
+
+/* Card — Area/location label */
+/* Blueprint: Harga & alamat = EB Garamond 400, 16px/22px, #717171 */
+.area {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font: 400 16px/22px var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  color: #717171;
+  margin-bottom: 6px;
+}
+
+.area svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  fill: none;
+  stroke: #717171;
+  stroke-width: 1.6;
+}
+
+/* Card — Price */
+/* Blueprint: Harga & alamat = EB Garamond 400, 16px/22px, #717171 */
+.price {
+  font: 400 16px/22px var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  color: #717171;
+  margin: 0 0 6px;
+}
+
+/* Card — Specs row (KT, KM, m²) */
+/* Blueprint: same 16px base, slightly smaller for spec details */
+.specs {
+  display: flex;
+  gap: 6px 14px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  font-family: var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+}
+
+.specs span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: 400 16px/22px var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  color: #222222;
+}
+
+.specs svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+
+/* Card — Title */
+/* Blueprint: Harga & alamat = EB Garamond 400, 16px/22px */
+.info h2 {
+  font: 400 16px/22px var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif !important;
+  margin: 0 0 2px;
+  color: var(--ink, #18352b);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Card — Location subline */
+/* Blueprint: same card spec, 16px/22px */
+.location {
+  font: 400 16px/22px var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  color: #717171;
+  margin: 0;
+}
+
+/* Card — Certificate badge */
+.cert {
+  display: inline-block;
+  font: 700 11px/14px var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  letter-spacing: 0.1em;
+  color: var(--gold, #c6a464);
+  background: #faf6ee;
+  padding: 3px 7px;
+  border-radius: 3px;
+  margin-top: 10px;
+  text-transform: uppercase;
+}
+
+/* --------------------------------------------------------------------------
+   EMPTY STATE
+   -------------------------------------------------------------------------- */
+.empty {
+  text-align: center;
+  padding: 80px 20px;
+  font-family: var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+}
+
+/* Blueprint: Section heading = The Seasons 600, 22px/25px, #222222 */
+.empty h2 {
+  font: 600 22px/25px var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif !important;
+  color: #222222;
+  margin: 0 0 12px;
+}
+
+/* Blueprint: Paragraf = EB Garamond 400, 22px/31px */
+.empty p {
+  font: 400 22px/31px var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  color: #222222;
+  margin: 0 0 20px;
+}
+
+.empty a {
+  color: #717171;
+  font: 400 16px/22px var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* --------------------------------------------------------------------------
+   PAGINATION
+   Blueprint: Nav/filter = EB Garamond 400, 16px/16px
+   -------------------------------------------------------------------------- */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 54px 0 60px;
+  font-family: var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+}
+
+.pagination a,
+.pagination > span {
+  display: grid;
+  place-items: center;
+  min-width: 38px;
+  height: 38px;
+  border: 1px solid #ece9e1;
+  border-radius: 4px;
+  font: 400 16px/16px var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  color: var(--ink, #18352b);
+  transition: all 0.2s;
+}
+
+.pagination a:hover {
+  border-color: var(--nav-blue, #5d89b3);
+  color: var(--nav-blue, #5d89b3);
+  transform: translateY(-1px);
+}
+
+.pagination > span {
+  background: var(--nav-blue, #5d89b3);
+  color: #fff;
+  border-color: var(--nav-blue, #5d89b3);
+}
+
+.pagination a svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
+.pagination p {
+  font: 400 16px/16px var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  color: #717171;
+  margin: 0;
+}
+
+/* --------------------------------------------------------------------------
+   FOOTER
+   Blueprint: Nav = EB Garamond 400, 16px/16px
+   -------------------------------------------------------------------------- */
+.footer {
+  border-top: 1px solid #ece9e1;
+  padding: 30px 0 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  font-family: var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+}
+
+.footer a {
+  font: 400 16px/16px var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  color: #717171;
+  transition: color 0.2s;
+}
+
+.footer a:hover {
+  color: #2e4d6a;
+}
+
+.footer p {
+  font: 400 16px/22px var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  color: #717171;
+  margin: 0;
+}
+
+/* --------------------------------------------------------------------------
+   ACCESSIBILITY
+   -------------------------------------------------------------------------- */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.page :is(a, button, input, select):focus-visible {
+  outline: 2px solid var(--nav-blue, #5d89b3);
+  outline-offset: 3px;
+}
+
+/* --------------------------------------------------------------------------
+   RESPONSIVE — 4 → 3 → 2 columns
+   -------------------------------------------------------------------------- */
+@media (max-width: 1100px) {
+  .grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .filters {
+    flex-wrap: wrap;
+  }
+
+  .search {
+    flex-basis: 100%;
+  }
+
+  .filters > label:not(.search) {
+    flex: 1;
+  }
+}
+
+@media (max-width: 650px) {
+  .content {
+    width: calc(100% - 28px);
+  }
+
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px 12px;
+  }
+
+  .filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .search {
+    grid-column: 1 / -1;
+  }
+
+  .filters select {
+    font-size: 16px;
+    padding: 8px 10px;
+  }
+
+  .reset {
+    grid-column: 1 / -1;
+    text-align: right;
+    justify-self: end;
+    padding: 2px 0;
+  }
+
+  .heading {
+    margin: 22px 0 20px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .heading > span {
+    display: none;
+  }
+
+  .info {
+    padding: 14px 14px 16px;
+  }
+
+  .footer {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .footer p {
+    margin: 0;
+  }
+
+  .pagination {
+    margin: 34px 0;
+  }
+
+  .noPhoto svg {
+    width: 28px;
+    height: 28px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .photo img,
+  .card article,
+  .submit,
+  .pagination a {
+    transition: none;
+  }
+}

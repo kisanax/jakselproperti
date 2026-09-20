@@ -1,30 +1,42 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { requireOperationalUser } from "@/lib/api-auth";
+import { getNextListingNumber } from "@/lib/sequence-number";
+import {
+  combineListingFilters,
+  combinePropertyFilters,
+} from "@/lib/services/property-listing-access";
 
 // =============================================================================
 // GET /api/listings — List listings
 // =============================================================================
 
 export async function GET(request: NextRequest) {
+  const guard = await requireOperationalUser();
+  if (guard.error) return guard.error;
+
   const searchParams = request.nextUrl.searchParams;
   const page = parseInt(searchParams.get("page") || "1");
   const perPage = parseInt(searchParams.get("perPage") || "20");
   const status = searchParams.get("status") || "";
   const search = searchParams.get("search") || "";
 
-  const where: Record<string, unknown> = {};
+  const filters: Prisma.ListingWhereInput = {};
 
   if (status) {
-    where.status = status;
+    filters.status = status as Prisma.EnumListingStatusFilter["equals"];
   }
 
   if (search) {
-    where.OR = [
+    filters.OR = [
       { title: { contains: search } },
       { property: { code: { contains: search } } },
       { property: { address: { contains: search } } },
     ];
   }
+
+  const where = combineListingFilters(guard.actor, filters);
 
   const [listings, total] = await Promise.all([
     prisma.listing.findMany({
@@ -49,24 +61,27 @@ export async function GET(request: NextRequest) {
 // =============================================================================
 
 export async function POST(request: NextRequest) {
+  const guard = await requireOperationalUser();
+  if (guard.error) return guard.error;
+
   try {
     const body = await request.json();
 
-    const property = await prisma.property.findUnique({
-      where: { id: body.propertyId },
+    const property = await prisma.property.findFirst({
+      where: combinePropertyFilters(guard.actor, { id: body.propertyId }),
     });
 
     if (!property) {
       return NextResponse.json({ error: "Properti tidak ditemukan" }, { status: 404 });
     }
 
-    const admin = await prisma.user.findFirst({
-      where: { email: "admin@jakselproperti.com" },
-    });
+    const listingNumber = await getNextListingNumber(prisma);
 
     const listing = await prisma.listing.create({
       data: {
         propertyId: body.propertyId,
+        listingNumber,
+        managedById: guard.actor.userId,
         status: "DRAFT",
         askingPrice: body.askingPrice || 0,
         minimumPrice: body.minimumPrice || null,
@@ -77,17 +92,15 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    if (admin) {
-      await prisma.listingStatusHistory.create({
-        data: {
-          listingId: listing.id,
-          fromStatus: null,
-          toStatus: "DRAFT",
-          changedBy: admin.id,
-          reason: "Listing dibuat",
-        },
-      });
-    }
+    await prisma.listingStatusHistory.create({
+      data: {
+        listingId: listing.id,
+        fromStatus: null,
+        toStatus: "DRAFT",
+        changedBy: guard.actor.userId,
+        reason: "Listing dibuat",
+      },
+    });
 
     return NextResponse.json({ listing }, { status: 201 });
   } catch (error) {

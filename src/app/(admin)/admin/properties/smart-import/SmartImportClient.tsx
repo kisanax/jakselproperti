@@ -6,38 +6,26 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Sparkles,
-  AlertTriangle,
   UploadCloud,
   CheckCircle2,
   Trash2,
   ExternalLink,
-  Info,
-  Building,
-  DollarSign,
-  MapPin,
-  Home,
   ShieldAlert,
   Video,
   PlayCircle,
-  Film,
   Maximize2,
   X,
   Star,
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 import { DuplicateMatch } from "@/lib/duplicate-checker";
-
-interface AreaOption {
-  id: string;
-  name: string;
-  slug: string;
-}
+import { AreaPicker } from "@/components/admin-ui";
 
 interface KawasanOption {
   id: string;
   name: string;
   slug: string;
-  areaId: string;
+  areaId: number;
 }
 
 interface AmenityOption {
@@ -48,13 +36,11 @@ interface AmenityOption {
 }
 
 interface SmartImportClientProps {
-  areas: AreaOption[];
   amenities: AmenityOption[];
   kawasanList: KawasanOption[];
 }
 
 export default function SmartImportClient({
-  areas,
   amenities,
   kawasanList,
 }: SmartImportClientProps) {
@@ -97,6 +83,8 @@ export default function SmartImportClient({
   const [title, setTitle] = useState("");
   const [type, setType] = useState<"HOUSE" | "APARTMENT" | "LAND" | "SHOPHOUSE">("HOUSE");
   const [areaId, setAreaId] = useState("");
+  const [villageId, setVillageId] = useState("");
+  const [pickerAreaId, setPickerAreaId] = useState<number | null>(null);
   const [kawasanId, setKawasanId] = useState<string>("");
   const [address, setAddress] = useState("");
   const [landArea, setLandArea] = useState<string>("");
@@ -110,7 +98,7 @@ export default function SmartImportClient({
   const [carports, setCarports] = useState<string>("0");
   const [certificateType, setCertificateType] = useState<string>("SHM");
   const [askingPrice, setAskingPrice] = useState<string>("");
-  const [listingStatus, setListingStatus] = useState<"DRAFT" | "ACTIVE">("ACTIVE");
+  const [listingStatus, setListingStatus] = useState<"DRAFT" | "PENDING_VERIFICATION">("DRAFT");
   const [description, setDescription] = useState("");
   const [internalNotes, setInternalNotes] = useState("");
   const [selectedAmenityIds, setSelectedAmenityIds] = useState<string[]>([]);
@@ -176,7 +164,10 @@ Serius berminat? Silakan hubungi untuk info & jadwal survey.`;
       setCode(data.suggestedCode || "");
       setTitle(p.title || "");
       setType(p.type || "HOUSE");
-      setAreaId(p.areaId || areas[0]?.id || "");
+      // Area AI tetap dipakai sebagai kecamatan awal dan di-resolve oleh picker.
+      setAreaId(p.areaId ? String(p.areaId) : "");
+      setVillageId("");
+      setPickerAreaId(p.areaId ? Number(p.areaId) : null);
       setKawasanId(p.kawasanId || "");
       setAddress(p.address || "");
       setLandArea(p.landArea ? String(p.landArea) : "");
@@ -250,7 +241,7 @@ Serius berminat? Silakan hubungi untuk info & jadwal survey.`;
   };
 
   // Filter kawasans based on selected area
-  const availableKawasans = kawasanList.filter((k) => k.areaId === areaId);
+  const availableKawasans = kawasanList.filter((k) => String(k.areaId) === areaId);
 
   // Submit and Save
   const handleSaveProperty = async () => {
@@ -272,6 +263,7 @@ Serius berminat? Silakan hubungi untuk info & jadwal survey.`;
         code: code.trim(),
         type,
         areaId,
+        villageId: villageId || null,
         kawasanId: kawasanId || null,
         address: address.trim(),
         landArea: landArea ? parseInt(landArea, 10) : null,
@@ -314,15 +306,6 @@ Serius berminat? Silakan hubungi untuk info & jadwal survey.`;
 
       const createdPropertyId = resData.property.id;
 
-      // Update listing status if set to ACTIVE
-      if (listingStatus === "ACTIVE" && resData.listing?.id) {
-        await fetch(`/api/listings/${resData.listing.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: "ACTIVE" }),
-        });
-      }
-
       // 2. Upload photos jika ada
       if (photos.length > 0) {
         toast.loading(`Mengunggah ${photos.length} foto properti...`, { id: "save-prop" });
@@ -333,10 +316,23 @@ Serius berminat? Silakan hubungi untuk info & jadwal survey.`;
           formData.append("isPrimary", i === 0 ? "true" : "false");
           formData.append("sortOrder", String(i));
 
-          await fetch(`/api/properties/${createdPropertyId}/media`, {
+          const uploadResponse = await fetch(`/api/properties/${createdPropertyId}/media`, {
             method: "POST",
             body: formData,
           });
+          if (!uploadResponse.ok) throw new Error(`Gagal mengunggah foto ${i + 1}`);
+        }
+      }
+
+      if (listingStatus === "PENDING_VERIFICATION" && resData.listing?.id) {
+        const reviewResponse = await fetch(`/api/listings/${resData.listing.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "PENDING_VERIFICATION" }),
+        });
+        if (!reviewResponse.ok) {
+          const reviewData = await reviewResponse.json();
+          throw new Error(reviewData.error || "Gagal mengirim listing untuk verifikasi");
         }
       }
 
@@ -581,7 +577,7 @@ Serius berminat? Silakan hubungi untuk info & jadwal survey.`;
                   <select
                     className="admin-input"
                     value={type}
-                    onChange={(e) => setType(e.target.value as any)}
+                    onChange={(e) => setType(e.target.value as "HOUSE" | "APARTMENT" | "LAND" | "SHOPHOUSE")}
                   >
                     <option value="HOUSE">Rumah</option>
                     <option value="APARTMENT">Apartemen</option>
@@ -602,24 +598,18 @@ Serius berminat? Silakan hubungi untuk info & jadwal survey.`;
                 />
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
-                <div>
-                  <label className="admin-label">Kecamatan (Resmi)</label>
-                  <select
-                    className="admin-input"
-                    value={areaId}
-                    onChange={(e) => {
-                      setAreaId(e.target.value);
-                      setKawasanId("");
-                    }}
-                  >
-                    {areas.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 14, marginBottom: 14 }}>
+                <AreaPicker
+                  value={pickerAreaId}
+                  required
+                  idPrefix="smart-import-area"
+                  onChange={({ areaId: leafId, kecamatanId }) => {
+                    setPickerAreaId(leafId);
+                    setAreaId(kecamatanId ? String(kecamatanId) : "");
+                    setVillageId(leafId && kecamatanId && leafId !== kecamatanId ? String(leafId) : "");
+                    setKawasanId("");
+                  }}
+                />
                 <div>
                   <label className="admin-label">Kawasan Populer</label>
                   <select
@@ -812,10 +802,10 @@ Serius berminat? Silakan hubungi untuk info & jadwal survey.`;
                 <select
                   className="admin-input"
                   value={listingStatus}
-                  onChange={(e) => setListingStatus(e.target.value as any)}
+                   onChange={(e) => setListingStatus(e.target.value as "DRAFT" | "PENDING_VERIFICATION")}
                 >
-                  <option value="ACTIVE">ACTIVE (Langsung Tayang di Portal)</option>
-                  <option value="DRAFT">DRAFT (Simpan Internal Dahulu)</option>
+                  <option value="DRAFT">DRAFT (Simpan dan lengkapi dahulu)</option>
+                  <option value="PENDING_VERIFICATION">KIRIM UNTUK VERIFIKASI</option>
                 </select>
               </div>
 
@@ -978,6 +968,7 @@ Serius berminat? Silakan hubungi untuk info & jadwal survey.`;
                         touchAction: "manipulation",
                       }}
                     >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={url}
                         alt={`Preview ${idx + 1}`}

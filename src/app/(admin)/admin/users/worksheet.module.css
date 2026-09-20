@@ -1,0 +1,47 @@
+.desktopActions { display: flex; gap: 8px; }
+
+.permissionList { display: flex; flex-direction: column; gap: 10px; }
+.permissionList > span { display: flex; align-items: center; gap: 9px; color: var(--workspace-text); font-size: 13px; line-height: 19px; }
+.permissionList svg { color: var(--workspace-primary); flex: 0 0 auto; }
+
+.statusActions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.selfNote { color: var(--workspace-text-muted); font-size: 12px; line-height: 18px; }
+
+.toast {
+  position: fixed;
+  bottom: calc(var(--spacing-admin-bottom-nav, 64px) + 16px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: var(--workspace-radius-card);
+  background: var(--workspace-btn);
+  color: var(--workspace-btn-text);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 10px 30px rgba(12, 18, 28, .28);
+  z-index: 60;
+}
+
+@media (min-width: 1025px) {
+  .toast { bottom: 24px; }
+}
+
+@media (max-width: 640px) {
+  .desktopActions { display: none; }
+  .mobileActions {
+    position: fixed;
+    bottom: calc(var(--spacing-admin-bottom-nav, 64px) + env(safe-area-inset-bottom, 0px));
+    left: 0;
+    right: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+    padding: 10px 12px;
+    background: var(--workspace-surface);
+    border-top: 1px solid var(--workspace-border);
+    z-index: 50;
+  }
+}

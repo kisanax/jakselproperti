@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export default async function ImportPropertyPage() {
   const [areas, kawasanList] = await Promise.all([
     prisma.area.findMany({
-      where: { level: 1, isActive: true },
+      where: { level: 3, isActive: true },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),

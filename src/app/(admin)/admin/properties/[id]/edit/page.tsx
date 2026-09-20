@@ -1,6 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import EditPropertyClient from "./EditPropertyClient";
+import { getCurrentOperationalActor } from "@/lib/api-auth";
+import {
+  combinePropertyFilters,
+  listingAccessFilter,
+} from "@/lib/services/property-listing-access";
 
 export const dynamic = "force-dynamic";
 
@@ -9,14 +14,18 @@ export default async function EditPropertyPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const operational = await getCurrentOperationalActor();
+  if (!operational) notFound();
   const { id } = await params;
 
-  const [property, areas, kawasanList] = await Promise.all([
+  const [property, kawasanList] = await Promise.all([
     prisma.property.findFirst({
-      where: { OR: [{ id }, { code: id }] },
+      where: combinePropertyFilters(operational.actor, { OR: [{ id }, { code: id }] }),
       include: {
         area: { select: { name: true } },
+        village: { select: { name: true } },
         listings: {
+          where: listingAccessFilter(operational.actor),
           orderBy: { createdAt: "desc" },
           take: 1,
         },
@@ -27,11 +36,6 @@ export default async function EditPropertyPage({
           orderBy: { sortOrder: "asc" },
         },
       },
-    }),
-    prisma.area.findMany({
-      where: { level: 1, isActive: true },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true, slug: true },
     }),
     prisma.kawasan.findMany({
       where: { isActive: true },
@@ -49,6 +53,7 @@ export default async function EditPropertyPage({
     code: property.code,
     type: property.type,
     areaId: property.areaId,
+    villageId: property.villageId,
     kawasanId: property.kawasanId,
     address: property.address,
     landArea: property.landArea ? Number(property.landArea) : null,
@@ -97,10 +102,9 @@ export default async function EditPropertyPage({
   return (
     <EditPropertyClient
       property={propertyData}
-      areaName={property.area?.name}
+      areaName={property.village?.name || property.area?.name}
       listing={listingData}
       amenities={amenitiesData}
-      areas={areas}
       kawasanList={kawasanList}
       initialMedia={initialMedia}
     />

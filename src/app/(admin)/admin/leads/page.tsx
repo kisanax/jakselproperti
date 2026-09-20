@@ -1,11 +1,19 @@
 import { prisma } from "@/lib/prisma";
 import KanbanBoard, { KanbanLead } from "./KanbanBoard";
+import { getCurrentOperationalActor } from "@/lib/api-auth";
+import { listingAccessFilter } from "@/lib/services/property-listing-access";
+import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 export default async function LeadsPage() {
+  const operational = await getCurrentOperationalActor();
+  if (!operational) notFound();
+  const listingScope = listingAccessFilter(operational.actor);
+
   const [rawLeads, listings] = await Promise.all([
     prisma.lead.findMany({
+      where: { listing: listingScope },
       include: {
         customer: true,
         listing: {
@@ -31,6 +39,7 @@ export default async function LeadsPage() {
       orderBy: { updatedAt: "desc" },
     }),
     prisma.listing.findMany({
+      where: listingScope,
       select: {
         id: true,
         title: true,

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireSuperAdmin } from "@/lib/api-auth";
 
 // GET /api/customers/[id]
 export async function GET(
@@ -106,6 +107,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const guard = await requireSuperAdmin();
+  if (guard.error) return guard.error;
+
   const { id } = await params;
   try {
     const leadCount = await prisma.lead.count({

@@ -1,11 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { requireOperationalUser } from "@/lib/api-auth";
+import { getKecamatanArea, getVillageArea } from "@/lib/areas";
+import { getNextPropertyCode } from "@/lib/property-code";
+import {
+  getNextPropertyNumber,
+  getNextListingNumber,
+} from "@/lib/sequence-number";
+import {
+  combinePropertyFilters,
+  isOperationalStaff,
+  listingAccessFilter,
+} from "@/lib/services/property-listing-access";
 
 // =============================================================================
 // GET /api/properties — List properties
 // =============================================================================
 
 export async function GET(request: NextRequest) {
+  const guard = await requireOperationalUser();
+  if (guard.error) return guard.error;
+
   const searchParams = request.nextUrl.searchParams;
   const page = parseInt(searchParams.get("page") || "1");
   const perPage = parseInt(searchParams.get("perPage") || "20");
@@ -14,26 +30,28 @@ export async function GET(request: NextRequest) {
   const areaSlug = searchParams.get("area") || "";
   const kawasanSlug = searchParams.get("kawasan") || "";
 
-  const where: Record<string, unknown> = {};
+  const filters: Prisma.PropertyWhereInput = {};
 
   if (search) {
-    where.OR = [
+    filters.OR = [
       { code: { contains: search } },
       { address: { contains: search } },
     ];
   }
 
   if (type) {
-    where.type = type;
+    filters.type = type as Prisma.EnumPropertyTypeFilter["equals"];
   }
 
   if (areaSlug) {
-    where.area = { slug: areaSlug };
+    filters.area = { slug: areaSlug };
   }
 
   if (kawasanSlug) {
-    where.kawasan = { slug: kawasanSlug };
+    filters.kawasan = { slug: kawasanSlug };
   }
+
+  const where = combinePropertyFilters(guard.actor, filters);
 
   const [properties, total] = await Promise.all([
     prisma.property.findMany({
@@ -42,11 +60,15 @@ export async function GET(request: NextRequest) {
         area: true,
         kawasan: true,
         listings: {
+          where: listingAccessFilter(guard.actor),
           orderBy: { createdAt: "desc" },
           take: 1,
         },
         _count: {
-          select: { propertyMedia: true, listings: true },
+          select: {
+            propertyMedia: true,
+            listings: { where: listingAccessFilter(guard.actor) },
+          },
         },
       },
       orderBy: { createdAt: "desc" },
@@ -64,25 +86,54 @@ export async function GET(request: NextRequest) {
 // =============================================================================
 
 export async function POST(request: NextRequest) {
+  const guard = await requireOperationalUser();
+  if (guard.error) return guard.error;
+
   try {
     const body = await request.json();
 
-    // Generate property code
+    // areaId datang sebagai string dari form — Area.id sekarang Int.
+    const areaId = Number(body.areaId);
+    if (!Number.isInteger(areaId)) {
+      return NextResponse.json({ error: "areaId tidak valid" }, { status: 400 });
+    }
+
+    const area = await getKecamatanArea(prisma, areaId);
+    if (!area) {
+      return NextResponse.json({ error: "areaId harus merujuk ke kecamatan" }, { status: 400 });
+    }
+
+    const villageId = body.villageId ? Number(body.villageId) : null;
+    if (
+      villageId !== null &&
+      (!Number.isInteger(villageId) || !(await getVillageArea(prisma, villageId, areaId)))
+    ) {
+      return NextResponse.json(
+        { error: "villageId harus merujuk ke kelurahan/desa di kecamatan terpilih" },
+        { status: 400 }
+      );
+    }
+
+    // Generate property code (format: {kode Kemendagri kecamatan}-{running},
+    // cth. "317407-0001")
     let code = body.code?.trim();
     if (!code) {
-      const area = body.areaId
-        ? await prisma.area.findUnique({ where: { id: body.areaId }, select: { slug: true } })
-        : null;
-      const { generatePropertyCode } = await import("@/lib/area-codes");
-      code = await generatePropertyCode(prisma, area?.slug);
+      code =
+        (await getNextPropertyCode(prisma, {
+          kecamatanOfficialCode: area.officialCode,
+        })) || `GEN-${Date.now().toString(36).toUpperCase()}`;
     }
 
     // Create property
+    const propertyNumber = await getNextPropertyNumber(prisma);
+
     const property = await prisma.property.create({
       data: {
         code,
+        propertyNumber,
         type: body.type,
-        areaId: body.areaId,
+        areaId,
+        villageId,
         kawasanId: body.kawasanId || null,
         address: body.address,
         landArea: body.landArea || null,
@@ -138,17 +189,15 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Create listing if price is provided
+    // Broker-created properties always receive an owned draft so they remain
+    // reachable through the ownership scope.
     let listing = null;
-    if (body.askingPrice || body.priceOnRequest) {
-      // Get default admin user
-      const admin = await prisma.user.findFirst({
-        where: { email: "admin@jakselproperti.com" },
-      });
-
+    if (body.askingPrice || body.priceOnRequest || !isOperationalStaff(guard.actor)) {
       listing = await prisma.listing.create({
         data: {
           propertyId: property.id,
+          listingNumber: await getNextListingNumber(prisma),
+          managedById: guard.actor.userId,
           status: "DRAFT",
           askingPrice: body.askingPrice || 0,
           minimumPrice: body.minimumPrice || null,
@@ -163,17 +212,15 @@ export async function POST(request: NextRequest) {
       });
 
       // Status history
-      if (admin) {
-        await prisma.listingStatusHistory.create({
-          data: {
-            listingId: listing.id,
-            fromStatus: null,
-            toStatus: "DRAFT",
-            changedBy: admin.id,
-            reason: "Listing dibuat",
-          },
-        });
-      }
+      await prisma.listingStatusHistory.create({
+        data: {
+          listingId: listing.id,
+          fromStatus: null,
+          toStatus: "DRAFT",
+          changedBy: guard.actor.userId,
+          reason: "Listing dibuat",
+        },
+      });
 
       // Link intermediary to listing
       if (intermediary) {

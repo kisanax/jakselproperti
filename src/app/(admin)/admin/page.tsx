@@ -9,15 +9,31 @@ import {
   Clock,
   Gavel,
   AlertCircle,
+  MapPin,
 } from "lucide-react";
 import Link from "next/link";
 import { effectiveStatus } from "@/lib/auctions";
+import { getCurrentOperationalActor } from "@/lib/api-auth";
+import {
+  combineListingFilters,
+  isOperationalStaff,
+  listingAccessFilter,
+  propertyAccessFilter,
+  type OperationalActor,
+} from "@/lib/services/property-listing-access";
+import { notFound } from "next/navigation";
 
 // =============================================================================
 // Data fetching
 // =============================================================================
 
-async function getDashboardData() {
+async function getDashboardData(actor: OperationalActor) {
+  const listingScope = listingAccessFilter(actor);
+  const leadScope = { listing: listingScope };
+  const auctionScope = isOperationalStaff(actor)
+    ? {}
+    : { property: { is: propertyAccessFilter(actor) } };
+
   const [
     totalProperties,
     totalActiveListings,
@@ -27,13 +43,15 @@ async function getDashboardData() {
     recentListings,
     recentLeads,
     auctionRows,
+    areaCount,
   ] = await Promise.all([
-    prisma.property.count(),
-    prisma.listing.count({ where: { status: "ACTIVE" } }),
-    prisma.listing.count({ where: { status: "DRAFT" } }),
-    prisma.lead.count(),
-    prisma.lead.count({ where: { currentStage: "NEW" } }),
+    prisma.property.count({ where: propertyAccessFilter(actor) }),
+    prisma.listing.count({ where: combineListingFilters(actor, { status: "ACTIVE" }) }),
+    prisma.listing.count({ where: combineListingFilters(actor, { status: "DRAFT" }) }),
+    prisma.lead.count({ where: leadScope }),
+    prisma.lead.count({ where: { AND: [leadScope, { currentStage: "NEW" }] } }),
     prisma.listing.findMany({
+      where: listingScope,
       take: 5,
       orderBy: { createdAt: "desc" },
       include: {
@@ -43,6 +61,7 @@ async function getDashboardData() {
       },
     }),
     prisma.lead.findMany({
+      where: leadScope,
       take: 5,
       orderBy: { createdAt: "desc" },
       include: {
@@ -55,6 +74,7 @@ async function getDashboardData() {
       },
     }),
     prisma.auctionRecord.findMany({
+      where: auctionScope,
       select: {
         id: true,
         title: true,
@@ -63,6 +83,7 @@ async function getDashboardData() {
         activeUntil: true,
       },
     }),
+    prisma.area.count({ where: { isActive: true } }),
   ]);
 
   const activeAuctions = auctionRows.filter(
@@ -94,6 +115,7 @@ async function getDashboardData() {
     totalAuctions: auctionRows.length,
     activeAuctions,
     expiredAuctions,
+    areaCount,
   };
 }
 
@@ -191,7 +213,10 @@ function getPropertyTypeLabel(type: string): string {
 // =============================================================================
 
 export default async function AdminDashboard() {
-  const data = await getDashboardData();
+  const operational = await getCurrentOperationalActor();
+  if (!operational) notFound();
+  const data = await getDashboardData(operational.actor);
+  const staff = isOperationalStaff(operational.actor);
 
   return (
     <div className="animate-fade-in">
@@ -206,7 +231,7 @@ export default async function AdminDashboard() {
       </div>
 
       {/* Expired Auction Alert */}
-      {data.expiredAuctions > 0 && (
+      {staff && data.expiredAuctions > 0 && (
         <div
           style={{
             display: "flex",
@@ -295,7 +320,7 @@ export default async function AdminDashboard() {
           </div>
         </div>
 
-        <Link href="/admin/auctions" className="admin-stat-card" style={{ textDecoration: "none", color: "inherit" }}>
+        {staff && <Link href="/admin/auctions" className="admin-stat-card" style={{ textDecoration: "none", color: "inherit" }}>
           <div
             className="admin-stat-icon"
             style={{ backgroundColor: "rgba(236, 72, 153, 0.12)", color: "#f472b6" }}
@@ -308,7 +333,20 @@ export default async function AdminDashboard() {
               Sitaan & Lelang ({data.activeAuctions} Aktif)
             </div>
           </div>
-        </Link>
+        </Link>}
+
+        <div className="admin-stat-card">
+          <div
+            className="admin-stat-icon"
+            style={{ backgroundColor: "rgba(6, 118, 71, 0.12)", color: "#067647" }}
+          >
+            <MapPin size={22} />
+          </div>
+          <div>
+            <div className="admin-stat-value">{data.areaCount.toLocaleString("id-ID")}</div>
+            <div className="admin-stat-label">Data Wilayah Tersinkron</div>
+          </div>
+        </div>
       </div>
 
       {/* Two Column: Recent Listings + Recent Leads */}
@@ -482,9 +520,9 @@ export default async function AdminDashboard() {
           <Link href="/admin/leads" className="admin-btn admin-btn-secondary">
             <MessageSquare size={18} /> Cek Leads
           </Link>
-          <Link href="/admin/auctions/new" className="admin-btn admin-btn-secondary">
+          {staff && <Link href="/admin/auctions/new" className="admin-btn admin-btn-secondary">
             <Gavel size={18} /> Catat Sitaan & Lelang
-          </Link>
+          </Link>}
         </div>
       </div>
     </div>

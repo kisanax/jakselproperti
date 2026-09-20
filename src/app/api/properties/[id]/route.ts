@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireOperationalUser, requireSuperAdmin } from "@/lib/api-auth";
+import { getKecamatanArea, getVillageArea } from "@/lib/areas";
+import {
+  combinePropertyFilters,
+  listingAccessFilter,
+} from "@/lib/services/property-listing-access";
 
 // =============================================================================
 // GET /api/properties/[id] — Get property detail
@@ -9,16 +15,21 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const guard = await requireOperationalUser();
+  if (guard.error) return guard.error;
+
   const { id } = await params;
 
   const property = await prisma.property.findFirst({
     where: {
-      OR: [{ id }, { code: id }],
+      ...combinePropertyFilters(guard.actor, { OR: [{ id }, { code: id }] }),
     },
     include: {
       area: { include: { parent: true } },
+      village: true,
       kawasan: true,
       listings: {
+        where: listingAccessFilter(guard.actor),
         orderBy: { createdAt: "desc" },
         include: {
           statusHistory: { orderBy: { createdAt: "desc" } },
@@ -57,23 +68,58 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const guard = await requireOperationalUser();
+  if (guard.error) return guard.error;
+
   const { id } = await params;
 
   try {
     const body = await request.json();
 
     const existing = await prisma.property.findFirst({
-      where: { OR: [{ id }, { code: id }] },
+      where: combinePropertyFilters(guard.actor, { OR: [{ id }, { code: id }] }),
     });
     if (!existing) {
       return NextResponse.json({ error: "Properti tidak ditemukan" }, { status: 404 });
+    }
+
+    const nextAreaId =
+      body.areaId !== undefined && body.areaId !== null && body.areaId !== ""
+        ? Number(body.areaId)
+        : existing.areaId;
+    if (body.areaId !== undefined && body.areaId !== null && body.areaId !== "") {
+      const areaId = nextAreaId;
+      if (!Number.isInteger(areaId) || !(await getKecamatanArea(prisma, areaId))) {
+        return NextResponse.json({ error: "areaId harus merujuk ke kecamatan" }, { status: 400 });
+      }
+    }
+
+    const nextVillageId =
+      body.villageId === null || body.villageId === ""
+        ? null
+        : body.villageId !== undefined
+          ? Number(body.villageId)
+          : existing.villageId;
+    if (
+      nextVillageId !== null &&
+      (!Number.isInteger(nextVillageId) ||
+        !(await getVillageArea(prisma, nextVillageId, nextAreaId)))
+    ) {
+      return NextResponse.json(
+        { error: "villageId harus merujuk ke kelurahan/desa di kecamatan terpilih" },
+        { status: 400 }
+      );
     }
 
     const property = await prisma.property.update({
       where: { id: existing.id },
       data: {
         type: body.type || undefined,
-        areaId: body.areaId || undefined,
+        areaId:
+          body.areaId !== undefined && body.areaId !== null && body.areaId !== ""
+            ? Number(body.areaId)
+            : undefined,
+        villageId: body.villageId !== undefined ? nextVillageId : undefined,
         kawasanId: body.kawasanId !== undefined ? (body.kawasanId || null) : undefined,
         address: body.address !== undefined ? body.address : undefined,
         landArea: body.landArea !== undefined ? (body.landArea ? parseInt(body.landArea) : null) : undefined,
@@ -105,6 +151,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const guard = await requireSuperAdmin();
+  if (guard.error) return guard.error;
+
   const { id } = await params;
 
   try {

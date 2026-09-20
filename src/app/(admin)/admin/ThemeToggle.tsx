@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useSyncExternalStore } from "react";
 import { Sun, Moon } from "lucide-react";
 
 interface ThemeToggleProps {
@@ -8,62 +8,41 @@ interface ThemeToggleProps {
   className?: string;
 }
 
-export default function ThemeToggle({ showLabel = false, className = "" }: ThemeToggleProps) {
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
-  const [mounted, setMounted] = useState(false);
+type Theme = "dark" | "light";
 
-  const applyTheme = useCallback((newTheme: "dark" | "light") => {
-    setTheme(newTheme);
-    if (typeof document !== "undefined") {
-      document.documentElement.setAttribute("data-theme", newTheme);
-      document.documentElement.style.colorScheme = newTheme;
-      if (document.body) {
-        document.body.setAttribute("data-theme", newTheme);
-      }
-      document.querySelectorAll<HTMLElement>(".admin-layout").forEach((el) => {
-        el.setAttribute("data-theme", newTheme);
-      });
-      try {
-        localStorage.setItem("admin-theme", newTheme);
-      } catch {}
+function getThemeSnapshot(): Theme {
+  return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+}
+
+function applyTheme(newTheme: Theme) {
+  document.documentElement.setAttribute("data-theme", newTheme);
+  document.documentElement.style.colorScheme = newTheme;
+  document.body?.setAttribute("data-theme", newTheme);
+  document.querySelectorAll<HTMLElement>(".admin-layout").forEach((element) => {
+    element.setAttribute("data-theme", newTheme);
+  });
+  try {
+    localStorage.setItem("admin-theme", newTheme);
+  } catch {}
+}
+
+function subscribeToTheme(onStoreChange: () => void) {
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key === "admin-theme" && (event.newValue === "dark" || event.newValue === "light")) {
+      applyTheme(event.newValue);
+      onStoreChange();
     }
-  }, []);
+  };
+  window.addEventListener("storage", handleStorage);
+  window.addEventListener("admin-theme-changed", onStoreChange);
+  return () => {
+    window.removeEventListener("storage", handleStorage);
+    window.removeEventListener("admin-theme-changed", onStoreChange);
+  };
+}
 
-  useEffect(() => {
-    // 1. Initial sync on mount
-    let saved: "dark" | "light" | null = null;
-    try {
-      saved = localStorage.getItem("admin-theme") as "dark" | "light" | null;
-    } catch {}
-    const currentAttr = typeof document !== "undefined"
-      ? (document.documentElement.getAttribute("data-theme") as "dark" | "light" | null)
-      : null;
-    const active = saved || currentAttr || "dark";
-
-    applyTheme(active);
-    setMounted(true);
-
-    // 2. Sync cross-tab changes
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === "admin-theme" && (e.newValue === "dark" || e.newValue === "light")) {
-        applyTheme(e.newValue);
-      }
-    };
-
-    // 3. Sync same-page multiple toggle instances (e.g. sidebar vs topbar)
-    const handleCustomChange = () => {
-      const current = (document.documentElement.getAttribute("data-theme") as "dark" | "light" | null) || "dark";
-      setTheme(current);
-    };
-
-    window.addEventListener("storage", handleStorage);
-    window.addEventListener("admin-theme-changed", handleCustomChange);
-
-    return () => {
-      window.removeEventListener("storage", handleStorage);
-      window.removeEventListener("admin-theme-changed", handleCustomChange);
-    };
-  }, [applyTheme]);
+export default function ThemeToggle({ showLabel = false, className = "" }: ThemeToggleProps) {
+  const theme = useSyncExternalStore(subscribeToTheme, getThemeSnapshot, () => "light");
 
   const toggleTheme = (e?: React.MouseEvent | React.TouchEvent) => {
     if (e) {
@@ -72,9 +51,7 @@ export default function ThemeToggle({ showLabel = false, className = "" }: Theme
     }
 
     // Read current theme from DOM directly to avoid any stale state
-    const currentDOM = typeof document !== "undefined"
-      ? (document.documentElement.getAttribute("data-theme") as "dark" | "light" | null)
-      : null;
+    const currentDOM = document.documentElement.getAttribute("data-theme") as Theme | null;
     const currentTheme = currentDOM || theme;
     const nextTheme = currentTheme === "dark" ? "light" : "dark";
 
@@ -84,8 +61,7 @@ export default function ThemeToggle({ showLabel = false, className = "" }: Theme
     window.dispatchEvent(new Event("admin-theme-changed"));
   };
 
-  // During SSR or before mount, use a fallback so button is never non-interactive or invisible
-  const isDark = mounted ? theme === "dark" : true;
+  const isDark = theme === "dark";
 
   return (
     <button

@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 
 export interface DuplicateMatch {
   id: string;
@@ -17,12 +17,13 @@ export interface DuplicateMatch {
 }
 
 export interface DuplicateCheckParams {
-  areaId?: string | null;
+  areaId?: number | null;
   areaSlug?: string | null;
   landArea?: number | null;
   buildingArea?: number | null;
   address?: string | null;
   excludePropertyId?: string | null;
+  scope?: Prisma.PropertyWhereInput;
 }
 
 /**
@@ -50,26 +51,26 @@ export async function checkDuplicateProperties(
   }
 
   // Buat query filter
-  const where: Record<string, unknown> = {};
+  const filters: Prisma.PropertyWhereInput = {};
 
   if (params.excludePropertyId) {
-    where.id = { not: params.excludePropertyId };
+    filters.id = { not: params.excludePropertyId };
   }
 
   if (resolvedAreaId) {
-    where.areaId = resolvedAreaId;
+    filters.areaId = resolvedAreaId;
   }
 
   // Jika ada luas tanah, cari yang toleransinya ±10 m²
   if (params.landArea && params.landArea > 0) {
-    where.landArea = {
+    filters.landArea = {
       gte: Math.max(1, params.landArea - 10),
       lte: params.landArea + 10,
     };
   }
 
   const candidates = await prisma.property.findMany({
-    where,
+    where: { AND: [params.scope || {}, filters] },
     include: {
       area: { select: { name: true } },
       kawasan: { select: { name: true } },
