@@ -148,6 +148,7 @@ export default function ListingDetailClient({
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [selectedNewStatus, setSelectedNewStatus] = useState("");
   const [statusReason, setStatusReason] = useState("");
+  const [statusErrors, setStatusErrors] = useState<string[]>([]);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   // Price Change Modal
@@ -172,6 +173,7 @@ export default function ListingDetailClient({
   const handleOpenStatusModal = (nextStatus: string) => {
     setSelectedNewStatus(nextStatus);
     setStatusReason("");
+    setStatusErrors([]);
     setStatusModalOpen(true);
   };
 
@@ -191,7 +193,17 @@ export default function ListingDetailClient({
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Gagal mengubah status");
+      if (!res.ok) {
+        const details = Array.isArray(data.details)
+          ? data.details.filter((item: unknown): item is string => typeof item === "string")
+          : [];
+        setStatusErrors(details);
+        toast.error(data.error || "Gagal mengubah status", {
+          description: details.length > 0 ? details.join(" • ") : undefined,
+          duration: 7000,
+        });
+        return;
+      }
 
       toast.success(`Status listing berhasil diubah ke ${getStatusLabel(selectedNewStatus)}`);
       // Refetch detail
@@ -829,6 +841,26 @@ export default function ListingDetailClient({
                     {getStatusLabel(selectedNewStatus)}
                   </div>
                 </div>
+
+                {statusErrors.length > 0 && (
+                  <div
+                    role="alert"
+                    style={{
+                      border: "1px solid rgba(220, 38, 38, 0.28)",
+                      borderRadius: 8,
+                      background: "rgba(254, 226, 226, 0.58)",
+                      padding: "12px 14px",
+                      color: "#991b1b",
+                    }}
+                  >
+                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
+                      Lengkapi data berikut sebelum dipublikasikan:
+                    </div>
+                    <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.6 }}>
+                      {statusErrors.map((item) => <li key={item}>{item}</li>)}
+                    </ul>
+                  </div>
+                )}
 
                 <div>
                   <label className="admin-label">Catatan / Alasan Perubahan Status</label>
