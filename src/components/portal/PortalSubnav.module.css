@@ -2,13 +2,14 @@
    PortalSubnav.module.css — Square-Rounded Luxury Search Capsule
    ========================================================================== */
 
-/* ─── Backdrop Scrim (Airbnb Scrim Pattern) ─── */
+/* Click-catcher untuk menutup popover. Sengaja transparan supaya header
+   pencarian tidak menciptakan balok abu-abu saat salah satu filter aktif. */
 .scrim {
   position: fixed;
   inset: 0;
-  background: rgba(26, 26, 26, 0.35);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   z-index: 40;
   opacity: 0;
   pointer-events: none;

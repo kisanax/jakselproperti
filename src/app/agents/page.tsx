@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import PortalHeader from "@/components/portal/PortalHeader";
+import MobileBottomNav from "@/components/portal/MobileBottomNav";
 import { prisma } from "@/lib/prisma";
 import styles from "./agents.module.css";
 
@@ -151,6 +152,7 @@ export default async function AgentsPage({
           <p>Properti pilihan. Perspektif yang personal.</p>
           <Link href="/jual">Lihat properti dijual</Link>
         </footer>
+        <MobileBottomNav />
       </main>
     </div>
   );

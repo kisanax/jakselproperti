@@ -3,6 +3,7 @@ import type { Prisma, PropertyType } from "@prisma/client";
 import Link from "next/link";
 import Image from "next/image";
 import PortalHeader from "@/components/portal/PortalHeader";
+import MobileBottomNav from "@/components/portal/MobileBottomNav";
 import { prisma } from "@/lib/prisma";
 import { getMediaUrl } from "@/lib/storage";
 import styles from "./sales.module.css";
@@ -439,6 +440,7 @@ export default async function SalesPage({
           <p>Properti pilihan. Perspektif yang personal.</p>
           <Link href="/daftar-broker">Bergabung sebagai broker ↗</Link>
         </footer>
+        <MobileBottomNav />
       </main>
     </div>
   );

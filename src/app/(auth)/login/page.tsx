@@ -6,6 +6,7 @@ import { getAccountAccess } from "@/lib/broker-workspace-access";
 import styles from "../auth.module.css";
 import { signInWithEmail, signInWithGoogle } from "./actions";
 import GoogleMark from "../daftar-broker/GoogleMark";
+import MobileBottomNav from "@/components/portal/MobileBottomNav";
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const access = await getAccountAccess();
@@ -44,39 +45,24 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
           <button type="submit" className={styles.primaryButton}>Masuk</button>
         </form>
 
-        <div className={`${styles.divider} ${styles.loginDivider}`}><span>atau</span></div>
-        <form action={signInWithGoogle} className={styles.socialLogin}>
-          <input type="hidden" name="returnTo" value={returnTo} />
-          <button
-            type="submit"
-            className={styles.googleIconButton}
-            aria-label={googleEnabled ? "Masuk dengan Google" : "Masuk dengan Google belum dikonfigurasi"}
-            title={googleEnabled ? "Masuk dengan Google" : "Google OAuth belum dikonfigurasi"}
-            disabled={!googleEnabled}
-          >
-            <GoogleMark className={styles.googleIcon} />
-          </button>
-        </form>
+        {googleEnabled && (
+          <>
+            <div className={`${styles.divider} ${styles.loginDivider}`}><span>atau</span></div>
+            <form action={signInWithGoogle} className={styles.socialLogin}>
+              <input type="hidden" name="returnTo" value={returnTo} />
+              <button type="submit" className={styles.googleIconButton} aria-label="Masuk dengan Google" title="Masuk dengan Google">
+                <GoogleMark className={styles.googleIcon} />
+              </button>
+            </form>
+          </>
+        )}
 
         <p className={styles.loginLegal}>
-          Belum punya akun? <Link href="/daftar-broker">Daftar broker</Link>
+          Belum punya akun? <Link href={`/daftar?returnTo=${encodeURIComponent(returnTo || "/akun")}`}>Daftar</Link>
         </p>
       </div>
 
-      <nav className={styles.loginMobileNav} aria-label="Navigasi portal">
-        <Link href="/">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg>
-          <span>Jelajah</span>
-        </Link>
-        <Link href="/jual">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 9-7 9 7v9H3v-9Z"/><path d="M9 20v-6h6v6"/></svg>
-          <span>Dijual</span>
-        </Link>
-        <Link href="/login" className={styles.loginNavActive} aria-current="page">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="9" r="3"/><path d="M6.5 18a7 7 0 0 1 11 0"/></svg>
-          <span>Masuk</span>
-        </Link>
-      </nav>
+      <MobileBottomNav />
     </section>
   );
 }

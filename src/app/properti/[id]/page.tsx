@@ -7,6 +7,7 @@ import type { Metadata } from "next";
 import { PropertyGallery } from "./PropertyGallery";
 import { PropertyShare } from "./PropertyShare";
 import { PropertyAccordion } from "./PropertyAccordion";
+import MobileBottomNav from "@/components/portal/MobileBottomNav";
 
 export const dynamic = "force-dynamic";
 
@@ -592,6 +593,7 @@ export default async function PropertyDetailPage({ params }: Props) {
         </span>
         <span className="cta-arrow">↗</span>
       </a>
+      <MobileBottomNav />
     </div>
   );
 }

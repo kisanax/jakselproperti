@@ -57,10 +57,12 @@ export default function UserWorksheet({
   user,
   mode = "edit",
   isSelf = false,
+  defaultRole = "MEMBER",
 }: {
   user?: AccountUser;
   mode?: "edit" | "create";
   isSelf?: boolean;
+  defaultRole?: AccountUser["platformRole"];
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -68,7 +70,7 @@ export default function UserWorksheet({
   const [saved, setSaved] = useState(false);
   const isCreate = mode === "create";
   const currentStatus = user ? accountStatus(user) : "ACTIVE";
-  const [effectiveRole, setEffectiveRole] = useState(user?.platformRole ?? "MEMBER");
+  const [effectiveRole, setEffectiveRole] = useState(user?.platformRole ?? defaultRole);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

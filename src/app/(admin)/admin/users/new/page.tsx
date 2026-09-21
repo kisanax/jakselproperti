@@ -1,5 +1,6 @@
 import UserWorksheet from "../UserWorksheet";
 
-export default function NewUserPage() {
-  return <UserWorksheet mode="create" />;
+export default async function NewUserPage({ searchParams }: { searchParams: Promise<{ role?: string }> }) {
+  const { role } = await searchParams;
+  return <UserWorksheet mode="create" defaultRole={role === "BROKER" ? "BROKER" : "MEMBER"} />;
 }

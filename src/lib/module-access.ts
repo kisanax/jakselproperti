@@ -32,7 +32,7 @@ export type ModuleDefinition = {
 
 export const MODULES: ModuleDefinition[] = [
   { key: "dashboard", label: "Dashboard", description: "Ringkasan statistik workspace", section: "Utama" },
-  { key: "brokers", label: "Broker & Cabang", description: "Direktori broker dan organisasi", section: "Organisasi" },
+  { key: "brokers", label: "Broker", description: "Direktori dan verifikasi akun broker", section: "Organisasi" },
   { key: "users", label: "Tim & Akses", description: "Kelola akun user dan role", section: "Organisasi" },
   { key: "properties", label: "Properti", description: "Database properti fisik", section: "Utama" },
   { key: "listings", label: "Listing", description: "Penawaran penjualan & workflow status", section: "Utama" },

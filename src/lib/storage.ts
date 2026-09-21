@@ -169,7 +169,8 @@ class R2Storage implements StorageProvider {
         })
       );
     } catch (err) {
-      console.warn(`R2 delete failed for key ${key}:`, err);
+      console.error(`R2 delete failed for key ${key}:`, err);
+      throw err;
     }
   }
 

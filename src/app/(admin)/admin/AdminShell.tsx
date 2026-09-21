@@ -41,7 +41,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard, section: "Utama", moduleKey: "dashboard" },
-  { label: "Broker & Cabang", href: "/admin/brokers", icon: Network, section: "Organisasi", moduleKey: "brokers" },
+  { label: "Broker", href: "/admin/brokers", icon: Network, section: "Organisasi", moduleKey: "brokers" },
   { label: "Tim & Akses", href: "/admin/users", icon: UsersRound, section: "Organisasi", moduleKey: "users", superAdminOnly: true },
   { label: "Properti", href: "/admin/properties", icon: Building2, section: "Utama", moduleKey: "properties" },
   { label: "Listing", href: "/admin/listings", icon: ListChecks, section: "Utama", moduleKey: "listings" },

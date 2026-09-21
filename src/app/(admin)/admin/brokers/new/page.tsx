@@ -1,5 +1,5 @@
-import BrokerWorksheet from "../BrokerWorksheet";
+import { redirect } from "next/navigation";
 
 export default function NewBrokerPage() {
-  return <BrokerWorksheet mode="create" />;
+  redirect("/admin/users/new?role=BROKER");
 }

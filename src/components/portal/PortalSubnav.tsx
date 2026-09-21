@@ -250,6 +250,7 @@ export default function PortalSubnav({
       {/* Soft Backdrop Scrim when search capsule is active */}
       <div
         className={`${styles.scrim} ${isAnyPopoverOpen ? styles.scrimActive : ""}`}
+        style={{ background: "transparent", backdropFilter: "none", WebkitBackdropFilter: "none" }}
         onClick={() => setActiveSegment(null)}
         aria-hidden="true"
       />

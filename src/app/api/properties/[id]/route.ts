@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireOperationalUser, requireSuperAdmin } from "@/lib/api-auth";
 import { getKecamatanArea, getVillageArea } from "@/lib/areas";
+import { getStorage } from "@/lib/storage";
 import {
   combinePropertyFilters,
   listingAccessFilter,
@@ -161,6 +162,7 @@ export async function DELETE(
       where: { OR: [{ id }, { code: id }] },
       include: {
         listings: { select: { id: true } },
+        propertyMedia: { select: { id: true, filePath: true } },
       },
     });
 
@@ -170,6 +172,16 @@ export async function DELETE(
 
     const propId = existing.id;
     const listingIds = existing.listings.map((l) => l.id);
+
+    // Object storage berada di luar transaksi database. Hapus seluruh objek
+    // terlebih dahulu; bila R2 gagal, hentikan proses agar tidak menyisakan
+    // objek yatim yang sudah kehilangan referensi dari database.
+    if (existing.propertyMedia.length > 0) {
+      const storage = getStorage();
+      await Promise.all(
+        existing.propertyMedia.map((media) => storage.delete(media.filePath))
+      );
+    }
 
     await prisma.$transaction(async (tx) => {
       if (listingIds.length > 0) {

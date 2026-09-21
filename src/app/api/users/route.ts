@@ -92,6 +92,9 @@ export async function POST(request: NextRequest) {
         email: parsed.data.email,
         platformRole: parsed.data.platformRole,
         password: parsed.data.password ? await hashPassword(parsed.data.password) : null,
+        brokerProfile: parsed.data.platformRole === "BROKER"
+          ? { create: { verificationStatus: "PROFILE_INCOMPLETE" } }
+          : undefined,
       },
       include: { brokerProfile: { select: { brokerType: true, verificationStatus: true, phone: true, city: true, province: true, onboardingCompletedAt: true } } },
     });

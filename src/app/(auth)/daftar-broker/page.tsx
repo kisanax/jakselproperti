@@ -24,7 +24,7 @@ export default async function BrokerRegistrationPage({ searchParams }: PageProps
         <p className={styles.eyebrow}>Daftar Broker</p>
         <h1 className={styles.title}>Bergabung sebagai Broker</h1>
         <p className={styles.description}>
-          Daftarkan diri Anda dengan akun Google. Setelah pendaftaran, Anda akan diminta melengkapi profil broker untuk ditinjau tim internal.
+          Buat atau gunakan akun Member, lalu lengkapi profil broker untuk ditinjau tim internal.
         </p>
 
         {access.kind === "member" ? (
@@ -40,19 +40,26 @@ export default async function BrokerRegistrationPage({ searchParams }: PageProps
           </>
         ) : (
           <>
-            <form action={continueWithGoogle}>
-              <button type="submit" className={styles.googleButton} disabled={!googleEnabled}>
-                <GoogleMark className={styles.googleIcon} />
-                Lanjutkan dengan Google
-              </button>
-            </form>
-            {configurationMissing && <p className={styles.googleHint}>Pendaftaran Google belum aktif pada environment ini. Masuk lebih dulu menggunakan akun yang sudah tersedia.</p>}
+            {googleEnabled && (
+              <form action={continueWithGoogle}>
+                <button type="submit" className={styles.googleButton}>
+                  <GoogleMark className={styles.googleIcon} />
+                  Lanjutkan dengan Google
+                </button>
+              </form>
+            )}
+            {configurationMissing && (
+              <>
+                <Link href="/daftar?returnTo=%2Fdaftar-broker" className={styles.primaryButton}>Daftar dengan email</Link>
+                <p className={styles.googleHint}>Akun dibuat sebagai Member terlebih dahulu, kemudian dilanjutkan ke pengajuan Broker.</p>
+              </>
+            )}
           </>
         )}
 
         <p className={styles.legal}>
           Sudah punya akun?{" "}
-          <Link href="/login" className={styles.modeToggle}>Masuk ke workspace</Link>
+          <Link href="/login?returnTo=%2Fdaftar-broker" className={styles.modeToggle}>Masuk ke akun</Link>
         </p>
       </div>
     </section>

@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import PortalHeader from "@/components/portal/PortalHeader";
 import MobilePropertyFilter from "@/components/portal/MobilePropertyFilter";
+import MobileBottomNav from "@/components/portal/MobileBottomNav";
 import { prisma } from "@/lib/prisma";
 import { getMediaUrl } from "@/lib/storage";
 
@@ -148,24 +149,7 @@ export default async function Home() {
         <span className="cta-arrow">↗</span>
       </a>
 
-      <nav className="mobile-bottom-nav" aria-label="Navigasi utama mobile">
-        <Link href="/" className="mobile-bottom-active" aria-current="page">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg>
-          <span>Jelajah</span>
-        </Link>
-        <Link href="/jual">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 9-7 9 7v9H3v-9Z"/><path d="M9 20v-6h6v6"/></svg>
-          <span>Dijual</span>
-        </Link>
-        <Link href="/agents">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
-          <span>Agen</span>
-        </Link>
-        <Link href="/login">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="9" r="3"/><path d="M6.5 18a7 7 0 0 1 11 0"/></svg>
-          <span>Akun</span>
-        </Link>
-      </nav>
+      <MobileBottomNav />
     </main>
   );
 }

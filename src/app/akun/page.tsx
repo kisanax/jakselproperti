@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { signOut } from "@/auth";
 import { getAccountAccess } from "@/lib/broker-workspace-access";
+import MobileBottomNav from "@/components/portal/MobileBottomNav";
 import styles from "./account.module.css";
 
 export default async function AccountPage() {
@@ -37,6 +38,7 @@ export default async function AccountPage() {
           <button type="submit" className={styles.logout}>Keluar</button>
         </form>
       </section>
+      <MobileBottomNav />
     </main>
   );
 }
