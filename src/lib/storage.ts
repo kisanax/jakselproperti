@@ -1,6 +1,9 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { getMediaUrl } from "./media-url";
+
+export { getMediaUrl } from "./media-url";
 
 // =============================================================================
 // Storage Abstraction Layer
@@ -19,17 +22,6 @@ export interface StorageProvider {
   upload(file: Buffer, fileName: string, folder: string, mimeType: string): Promise<UploadResult>;
   delete(filePath: string): Promise<void>;
   getUrl(filePath: string): string;
-}
-
-export function getMediaUrl(filePath: string): string {
-  if (!filePath) return "";
-  if (filePath.startsWith("http://") || filePath.startsWith("https://")) {
-    return filePath;
-  }
-  if (filePath.startsWith("/uploads/")) {
-    return filePath;
-  }
-  return `/uploads/${filePath}`;
 }
 
 // =============================================================================
@@ -140,7 +132,7 @@ class R2Storage implements StorageProvider {
 
     return {
       filePath: url,
-      url,
+      url: getMediaUrl(url),
       fileName: uniqueName,
       fileSize: file.length,
       mimeType,

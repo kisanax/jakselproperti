@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Save, Sparkles, Copy, Check } from "lucide-react";
 import { emptyAuction, auctionInput, categories, auctionStatuses, cities, addCalendarMonths, parseAuctionMessage, effectiveStatus, type AuctionForm as FormValues } from "@/lib/auctions";
 import type { AuctionView } from "@/lib/auction-records";
+import { getMediaUrl } from "@/lib/media-url";
 import "./auctions.css";
 type Props={initial?:AuctionView;preset?:Partial<FormValues>;properties:{id:string;code:string;address:string}[]};
 export default function AuctionForm({initial,preset,properties}:Props) {
@@ -101,7 +102,7 @@ export default function AuctionForm({initial,preset,properties}:Props) {
       <label><span>Status</span><select className="admin-input" value={form.status} onChange={e=>update("status",e.target.value)}>{Object.entries(auctionStatuses).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>
       {field("activeFrom","Mulai aktif","date")}{field("durationMonths","Durasi (bulan)","number")}{field("activeUntil","Berakhir (bisa disesuaikan)","date")}{field("depositDeadline","Batas setor deposit — WIB","datetime-local")}{field("auctionAt","Jadwal lelang — WIB","datetime-local")}{textarea("resultNotes","Hasil / konfirmasi penyelenggara")}
     </div><p>Listing aktif yang melewati batas waktu masuk review kedaluwarsa. Pemenang tidak ditetapkan otomatis.</p></section>
-    <section className="admin-card"><h2>Foto properti</h2><p>JPG, PNG, WebP · maks. 10 MB per foto · hingga 30 foto. Foto pertama menjadi sampul.</p><div className="auction-photos">{photos.map(url=><a key={url} href={url} target="_blank" rel="noreferrer"><img src={url} alt={form.title}/></a>)}</div>
+    <section className="admin-card"><h2>Foto properti</h2><p>JPG, PNG, WebP · maks. 10 MB per foto · hingga 30 foto. Foto pertama menjadi sampul.</p><div className="auction-photos">{photos.map(url=>{const mediaUrl=getMediaUrl(url);return <a key={url} href={mediaUrl} target="_blank" rel="noreferrer"><img src={mediaUrl} alt={form.title}/></a>;})}</div>
       <label><span>Tambah foto</span><input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={e=>{const files=Array.from(e.target.files||[]);if(files.some(f=>f.size>10*1024*1024)||photos.length+pending.length+files.length>30){setError("Maksimal 30 foto, masing-masing 10 MB");return;}setPending(prev=>[...prev,...files]);e.target.value="";}}/></label>
       {pending.map((file,i)=><div className="auction-pending" key={`${file.name}-${i}`}><span>{file.name}</span><button type="button" className="admin-btn admin-btn-secondary" onClick={()=>setPending(prev=>prev.filter((_,j)=>j!==i))}>Batalkan</button></div>)}
     </section>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { getMediaUrl } from "@/lib/media-url";
 
 type PhotoItem = {
   id: string;
@@ -21,9 +22,6 @@ export function PropertyGallery({ photos, title }: PropertyGalleryProps) {
 
   const totalPhotos = photos.length;
   const currentPhoto = photos[activeIndex] || photos[0];
-
-  const getUrl = (path: string) =>
-    path.startsWith("http") || path.startsWith("/") ? path : `/uploads/${path}`;
 
   const nextPhoto = useCallback(() => {
     setActiveIndex((prev) => (prev + 1) % totalPhotos);
@@ -78,7 +76,7 @@ export function PropertyGallery({ photos, title }: PropertyGalleryProps) {
           }}
         >
           <img
-            src={getUrl(currentPhoto.filePath)}
+            src={getMediaUrl(currentPhoto.filePath)}
             alt={currentPhoto.altText || `${title} — Foto ${activeIndex + 1}`}
             loading="eager"
           />
@@ -167,7 +165,7 @@ export function PropertyGallery({ photos, title }: PropertyGalleryProps) {
                   aria-label={`Pilih foto ${photoIndex + 1}`}
                 >
                   <img
-                    src={getUrl(photo.filePath)}
+                    src={getMediaUrl(photo.filePath)}
                     alt={photo.altText || `${title} — Foto ${photoIndex + 1}`}
                     loading="lazy"
                   />
@@ -245,7 +243,7 @@ export function PropertyGallery({ photos, title }: PropertyGalleryProps) {
 
               <div className="raveis-lightbox-photo-box">
                 <img
-                  src={getUrl(currentPhoto.filePath)}
+                  src={getMediaUrl(currentPhoto.filePath)}
                   alt={
                     currentPhoto.altText ||
                     `${title} — Foto ${activeIndex + 1}`
@@ -277,7 +275,7 @@ export function PropertyGallery({ photos, title }: PropertyGalleryProps) {
                   onClick={() => setActiveIndex(i)}
                   aria-label={`Lihat foto ${i + 1}`}
                 >
-                  <img src={getUrl(p.filePath)} alt="" />
+                  <img src={getMediaUrl(p.filePath)} alt="" />
                 </button>
               ))}
             </div>

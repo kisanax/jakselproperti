@@ -18,6 +18,7 @@ import {
   UserCheck,
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
+import { getMediaUrl } from "@/lib/media-url";
 
 interface ListingDetailProps {
   listing: {
@@ -746,10 +747,7 @@ export default function ListingDetailClient({
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
                   {listing.property.propertyMedia.slice(0, 3).map((m) => {
-                    const storedPath = m.url || m.filePath || "";
-                    const photoUrl = storedPath && !storedPath.startsWith("http") && !storedPath.startsWith("/")
-                      ? `/uploads/${storedPath}`
-                      : storedPath;
+                    const photoUrl = getMediaUrl(m.url || m.filePath || "");
 
                     return (
                       <div

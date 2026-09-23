@@ -18,6 +18,7 @@ import {
   PlayCircle,
   MessageCircle,
 } from "lucide-react";
+import { getMediaUrl } from "@/lib/media-url";
 
 interface PropertyPublicPreviewModalProps {
   property: {
@@ -491,7 +492,7 @@ export default function PropertyPublicPreviewModal({
                 <>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={sortedMedia[currentSlide].filePath.startsWith("http") ? sortedMedia[currentSlide].filePath : `/uploads/${sortedMedia[currentSlide].filePath}`}
+                    src={getMediaUrl(sortedMedia[currentSlide].filePath)}
                     alt={sortedMedia[currentSlide].altText || `Foto ${currentSlide + 1}`}
                     style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
                   />

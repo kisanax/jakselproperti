@@ -14,6 +14,7 @@ import {
   PlayCircle,
   ExternalLink,
 } from "lucide-react";
+import { getMediaUrl } from "@/lib/media-url";
 
 interface MediaItem {
   id: string;
@@ -195,7 +196,7 @@ export default function PropertyPhotoGallery({
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={item.filePath.startsWith("http") ? item.filePath : `/uploads/${item.filePath}`}
+                src={getMediaUrl(item.filePath)}
                 alt={item.altText || item.fileName}
                 draggable={false}
                 style={{
@@ -421,7 +422,7 @@ export default function PropertyPhotoGallery({
             {/* Main Picture */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={media[lightboxIndex].filePath.startsWith("http") ? media[lightboxIndex].filePath : `/uploads/${media[lightboxIndex].filePath}`}
+              src={getMediaUrl(media[lightboxIndex].filePath)}
               alt={media[lightboxIndex].altText || media[lightboxIndex].fileName}
               onClick={(e) => e.stopPropagation()}
               style={{
@@ -519,7 +520,7 @@ export default function PropertyPhotoGallery({
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={thumb.filePath.startsWith("http") ? thumb.filePath : `/uploads/${thumb.filePath}`}
+                  src={getMediaUrl(thumb.filePath)}
                   alt=""
                   style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
                 />

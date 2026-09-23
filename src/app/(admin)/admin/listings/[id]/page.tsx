@@ -6,6 +6,7 @@ import {
   allowedListingTransitions,
   combineListingFilters,
 } from "@/lib/services/property-listing-access";
+import { getMediaUrl } from "@/lib/media-url";
 
 export const dynamic = "force-dynamic";
 
@@ -78,7 +79,7 @@ export default async function ListingDetailPage({
       propertyMedia: rawListing.property.propertyMedia.map((m) => ({
         id: m.id,
         filePath: m.filePath,
-        url: m.filePath.startsWith("http") ? m.filePath : `/uploads/${m.filePath}`,
+        url: getMediaUrl(m.filePath),
         isPrimary: m.isPrimary,
       })),
     },

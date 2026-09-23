@@ -22,6 +22,7 @@ import {
 import { toast, Toaster } from "sonner";
 import PropertyPublicPreviewModal from "../PropertyPublicPreviewModal";
 import { AreaPicker } from "@/components/admin-ui";
+import { getMediaUrl } from "@/lib/media-url";
 
 interface KawasanOption {
   id: string;
@@ -132,7 +133,7 @@ export default function EditPropertyClient({
 
   const allPhotos = [
     ...mediaList.map((m) => ({
-      url: m.filePath.startsWith("http") ? m.filePath : `/uploads/${m.filePath}`,
+      url: getMediaUrl(m.filePath),
       title: m.fileName,
       isPrimary: m.isPrimary,
     })),
@@ -588,7 +589,7 @@ export default function EditPropertyClient({
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={m.filePath.startsWith("http") ? m.filePath : `/uploads/${m.filePath}`}
+                        src={getMediaUrl(m.filePath)}
                         alt={m.altText || m.fileName}
                         style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
                       />
