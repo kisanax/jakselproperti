@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireStaff } from "@/lib/api-auth";
 
 // GET /api/intermediaries
 export async function GET(request: NextRequest) {
+  const guard = await requireStaff();
+  if (guard.error) return guard.error;
+
   const searchParams = request.nextUrl.searchParams;
   const search = searchParams.get("search") || "";
 
@@ -34,6 +38,9 @@ export async function GET(request: NextRequest) {
 
 // POST /api/intermediaries
 export async function POST(request: NextRequest) {
+  const guard = await requireStaff();
+  if (guard.error) return guard.error;
+
   try {
     const body = await request.json();
     const intermediary = await prisma.intermediary.create({

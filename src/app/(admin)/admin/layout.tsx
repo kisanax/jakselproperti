@@ -70,6 +70,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       <div className={`admin-layout ${inter.variable}`} style={{ fontFamily: "var(--font-admin)" }} suppressHydrationWarning>
         <AdminShell
           platformRole={access.user.platformRole}
+          userName={access.user.name}
+          userEmail={access.user.email}
           accessibleModules={[...accessible]}
         >
           {children}

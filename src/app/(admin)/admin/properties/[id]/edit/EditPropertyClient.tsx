@@ -17,6 +17,7 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  Users,
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 import PropertyPublicPreviewModal from "../PropertyPublicPreviewModal";
@@ -79,6 +80,11 @@ interface EditPropertyProps {
       icon?: string | null;
     };
   }>;
+  owner?: {
+    id: string;
+    name: string;
+    phone: string | null;
+  } | null;
 }
 
 export default function EditPropertyClient({
@@ -88,6 +94,7 @@ export default function EditPropertyClient({
   areaName,
   listing,
   amenities = [],
+  owner,
 }: EditPropertyProps) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -110,6 +117,8 @@ export default function EditPropertyClient({
   const [electricity, setElectricity] = useState(property.electricity?.toString() || "");
   const [waterSource, setWaterSource] = useState(property.waterSource || "");
   const [internalNotes, setInternalNotes] = useState(property.internalNotes || "");
+  const [ownerName, setOwnerName] = useState(owner?.name || "");
+  const [ownerPhone, setOwnerPhone] = useState(owner?.phone || "");
 
   // Photo management states
   const [mediaList, setMediaList] = useState<MediaItem[]>(initialMedia);
@@ -277,6 +286,13 @@ export default function EditPropertyClient({
         electricity: electricity ? parseInt(electricity) : null,
         waterSource: waterSource || null,
         internalNotes: internalNotes || null,
+        owner: owner?.id || ownerName.trim()
+          ? {
+              id: owner?.id || null,
+              name: ownerName.trim(),
+              phone: ownerPhone.trim() || null,
+            }
+          : undefined,
       };
 
       const res = await fetch(`/api/properties/${property.id}`, {
@@ -487,6 +503,45 @@ export default function EditPropertyClient({
                 Alamat lengkap hanya dapat diakses oleh tim internal admin jakselproperti.
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Owner boleh dilengkapi saat draft, tetapi wajib sebelum listing dipublikasikan. */}
+        <div className="admin-card">
+          <div className="admin-card-header">
+            <div className="admin-card-title">
+              <Users size={16} style={{ display: "inline", marginRight: 6 }} />
+              Owner properti
+            </div>
+            <div className="admin-card-subtitle">
+              Boleh dikosongkan saat draft, tetapi wajib dilengkapi sebelum status Siap Publish.
+            </div>
+          </div>
+          <div className="admin-grid-2">
+            <div className="admin-input-group">
+              <label className="admin-label">Nama owner</label>
+              <input
+                type="text"
+                className="admin-input"
+                placeholder="Nama pemilik properti"
+                value={ownerName}
+                onChange={(event) => setOwnerName(event.target.value)}
+              />
+            </div>
+            <div className="admin-input-group">
+              <label className="admin-label">Nomor WhatsApp owner</label>
+              <input
+                type="tel"
+                className="admin-input"
+                inputMode="tel"
+                placeholder="08xxx"
+                value={ownerPhone}
+                onChange={(event) => setOwnerPhone(event.target.value)}
+              />
+            </div>
+          </div>
+          <div style={{ fontSize: 11, color: "var(--color-admin-text-muted)", marginTop: 4 }}>
+            Informasi ini bersifat internal dan tidak ditampilkan pada portal publik.
           </div>
         </div>
 

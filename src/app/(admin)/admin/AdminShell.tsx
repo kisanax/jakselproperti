@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { signOut } from "next-auth/react";
 import {
   LayoutDashboard,
   Building2,
@@ -20,6 +21,7 @@ import {
   Network,
   Bell,
   SlidersHorizontal,
+  LogOut,
 } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 
@@ -72,15 +74,29 @@ const bottomNavItems = [
 export default function AdminShell({
   children,
   platformRole,
+  userName,
+  userEmail,
   accessibleModules = [],
 }: {
   children: React.ReactNode;
   platformRole?: string;
+  userName?: string | null;
+  userEmail?: string | null;
   /** Daftar moduleKey yang aktif untuk role ini (dari Konfigurasi Akses). */
   accessibleModules?: string[];
 }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  const displayName = userName?.trim() || userEmail?.split("@")[0] || "Pengguna";
+  const userInitial = displayName.charAt(0).toUpperCase();
+
+  const handleSignOut = async () => {
+    if (isSigningOut) return;
+    setIsSigningOut(true);
+    await signOut({ callbackUrl: "/login" });
+  };
 
   const toggleSidebar = useCallback(() => {
     setSidebarOpen((prev) => !prev);
@@ -192,8 +208,24 @@ export default function AdminShell({
             </div>
           ))}
         </nav>
-        <div style={{ padding: "12px", borderTop: "1px solid var(--color-admin-border)" }}>
+        <div className="admin-sidebar-footer">
+          <div className="admin-sidebar-account">
+            <div className="admin-user-avatar" aria-hidden="true">{userInitial}</div>
+            <div className="admin-sidebar-account-copy">
+              <strong>{displayName}</strong>
+              {userEmail && <span>{userEmail}</span>}
+            </div>
+          </div>
           <ThemeToggle showLabel />
+          <button
+            type="button"
+            className="admin-nav-item admin-logout-button"
+            onClick={handleSignOut}
+            disabled={isSigningOut}
+          >
+            <LogOut className="nav-icon" size={20} />
+            {isSigningOut ? "Keluar..." : "Keluar dari akun"}
+          </button>
         </div>
       </aside>
 
@@ -216,22 +248,14 @@ export default function AdminShell({
           </div>
           <div className="admin-topbar-right">
             <ThemeToggle />
-            {/* User avatar / info — placeholder for when auth is implemented */}
             <div
+              className="admin-user-avatar"
+              title={`${displayName}${userEmail ? ` — ${userEmail}` : ""}`}
               style={{
-                width: 34,
-                height: 34,
-                borderRadius: "50%",
-                backgroundColor: "var(--color-admin-surface-hover)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 13,
-                fontWeight: 600,
-                color: "var(--color-admin-text-secondary)",
+                flexShrink: 0,
               }}
             >
-              A
+              {userInitial}
             </div>
           </div>
         </header>

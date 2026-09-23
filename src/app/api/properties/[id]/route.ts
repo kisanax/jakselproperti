@@ -79,6 +79,9 @@ export async function PUT(
 
     const existing = await prisma.property.findFirst({
       where: combinePropertyFilters(guard.actor, { OR: [{ id }, { code: id }] }),
+      include: {
+        propertyOwners: { select: { ownerId: true, isPrimary: true } },
+      },
     });
     if (!existing) {
       return NextResponse.json({ error: "Properti tidak ditemukan" }, { status: 404 });
@@ -112,9 +115,22 @@ export async function PUT(
       );
     }
 
-    const property = await prisma.property.update({
-      where: { id: existing.id },
-      data: {
+    const ownerInput = body.owner !== undefined
+      ? {
+          id: typeof body.owner?.id === "string" ? body.owner.id : null,
+          name: typeof body.owner?.name === "string" ? body.owner.name.trim() : "",
+          phone: typeof body.owner?.phone === "string" ? body.owner.phone.trim() : null,
+        }
+      : null;
+
+    if (ownerInput && !ownerInput.name) {
+      return NextResponse.json({ error: "Nama owner wajib diisi jika data owner ditambahkan" }, { status: 400 });
+    }
+
+    const property = await prisma.$transaction(async (tx) => {
+      const updatedProperty = await tx.property.update({
+        where: { id: existing.id },
+        data: {
         type: body.type || undefined,
         areaId:
           body.areaId !== undefined && body.areaId !== null && body.areaId !== ""
@@ -134,7 +150,39 @@ export async function PUT(
         electricity: body.electricity !== undefined ? (body.electricity ? parseInt(body.electricity) : null) : undefined,
         waterSource: body.waterSource !== undefined ? (body.waterSource || null) : undefined,
         internalNotes: body.internalNotes !== undefined ? (body.internalNotes || null) : undefined,
-      },
+        },
+      });
+
+      if (ownerInput) {
+        let ownerId = ownerInput.id;
+        if (ownerId) {
+          const isLinked = existing.propertyOwners.some((item) => item.ownerId === ownerId);
+          if (!isLinked) throw new Error("Owner tidak terhubung dengan properti ini");
+          await tx.owner.update({
+            where: { id: ownerId },
+            data: { name: ownerInput.name, phone: ownerInput.phone || null },
+          });
+        } else {
+          const createdOwner = await tx.owner.create({
+            data: { name: ownerInput.name, phone: ownerInput.phone || null },
+          });
+          ownerId = createdOwner.id;
+          await tx.propertyOwner.create({
+            data: { propertyId: existing.id, ownerId, isPrimary: true },
+          });
+        }
+
+        await tx.propertyOwner.updateMany({
+          where: { propertyId: existing.id },
+          data: { isPrimary: false },
+        });
+        await tx.propertyOwner.update({
+          where: { propertyId_ownerId: { propertyId: existing.id, ownerId } },
+          data: { isPrimary: true },
+        });
+      }
+
+      return updatedProperty;
     });
 
     return NextResponse.json({ property });

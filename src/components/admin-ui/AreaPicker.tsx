@@ -67,9 +67,9 @@ export function AreaPicker({
   useEffect(() => {
     const normalized = value === null || value === undefined || value === "" ? null : String(value);
     if (normalized === resolvedValue.current) return;
-    resolvedValue.current = normalized;
 
     if (normalized === null) {
+      resolvedValue.current = null;
       const timeout = window.setTimeout(() => {
         setProvinceId("");
         setCityId("");
@@ -103,6 +103,11 @@ export function AreaPicker({
         setCities(nextCities);
         setDistricts(nextDistricts);
         setVillages(village ? [village] : []);
+        // Tandai selesai hanya setelah seluruh hierarki berhasil dimuat.
+        // React Strict Mode menjalankan setup/cleanup effect dua kali di
+        // development; menandai sebelum fetch selesai membuat percobaan kedua
+        // terlewati setelah percobaan pertama dibatalkan.
+        resolvedValue.current = normalized;
       })
       .catch((err: unknown) => {
         if (!(err instanceof DOMException && err.name === "AbortError")) setError("Gagal memuat hierarki wilayah");

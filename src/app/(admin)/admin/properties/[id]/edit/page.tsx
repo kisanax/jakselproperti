@@ -35,6 +35,10 @@ export default async function EditPropertyPage({
         propertyMedia: {
           orderBy: { sortOrder: "asc" },
         },
+        propertyOwners: {
+          include: { owner: true },
+          orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+        },
       },
     }),
     prisma.kawasan.findMany({
@@ -99,6 +103,15 @@ export default async function EditPropertyPage({
     type: m.type,
   }));
 
+  const primaryOwner = property.propertyOwners[0];
+  const ownerData = primaryOwner
+    ? {
+        id: primaryOwner.owner.id,
+        name: primaryOwner.owner.name,
+        phone: primaryOwner.owner.phone,
+      }
+    : null;
+
   return (
     <EditPropertyClient
       property={propertyData}
@@ -107,6 +120,7 @@ export default async function EditPropertyPage({
       amenities={amenitiesData}
       kawasanList={kawasanList}
       initialMedia={initialMedia}
+      owner={ownerData}
     />
   );
 }

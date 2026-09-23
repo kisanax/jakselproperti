@@ -54,19 +54,27 @@ export async function POST(request: NextRequest) {
     // cakupan parser, user memilih area manual di form.
     const matchedArea = areas.find((a) => a.slug === parsed.areaSlug) || null;
     const matchedKawasan = kawasanList.find((k) => k.slug === parsed.kawasanSlug) || null;
+    // Broadcast sering hanya menyebut kawasan (mis. Cipete), bukan nama
+    // kecamatan administratifnya (Cilandak). Jika kawasan cocok, gunakan
+    // kecamatan induk kawasan sebagai fallback agar form dapat langsung disimpan.
+    const resolvedArea = matchedArea || (
+      matchedKawasan
+        ? areas.find((area) => area.id === matchedKawasan.areaId) || null
+        : null
+    );
 
     // 3. Generate kode properti: {kode Kemendagri kecamatan}-{running}
     //    Hanya bila area berhasil dikenali.
-    const suggestedCode = matchedArea?.officialCode
+    const suggestedCode = resolvedArea?.officialCode
       ? await getNextPropertyCode(prisma, {
-          kecamatanOfficialCode: matchedArea.officialCode,
+          kecamatanOfficialCode: resolvedArea.officialCode,
         })
       : null;
 
     // 4. Deteksi potensi duplikasi (hanya bila area dikenali)
-    const duplicates = matchedArea
+    const duplicates = resolvedArea
       ? await checkDuplicateProperties(prisma, {
-          areaId: matchedArea.id,
+          areaId: resolvedArea.id,
           landArea: parsed.landArea,
           buildingArea: parsed.buildingArea,
           address: parsed.address,
@@ -78,7 +86,7 @@ export async function POST(request: NextRequest) {
       success: true,
       parsed: {
         ...parsed,
-        areaId: matchedArea?.id ?? null,
+        areaId: resolvedArea?.id ?? null,
         kawasanId: matchedKawasan?.id ?? null,
       },
       suggestedCode,

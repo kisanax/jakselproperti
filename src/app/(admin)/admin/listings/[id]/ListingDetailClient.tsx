@@ -50,7 +50,8 @@ interface ListingDetailProps {
       };
       propertyMedia: {
         id: string;
-        url: string;
+        url?: string;
+        filePath?: string;
         isPrimary: boolean;
       }[];
     };
@@ -744,25 +745,38 @@ export default function ListingDetailClient({
                   Foto ({listing.property.propertyMedia.length})
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
-                  {listing.property.propertyMedia.slice(0, 3).map((m) => (
-                    <div
-                      key={m.id}
-                      style={{
-                        position: "relative",
-                        aspectRatio: "4/3",
-                        borderRadius: 4,
-                        overflow: "hidden",
-                        backgroundColor: "#eee",
-                      }}
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={m.url}
-                        alt="Property preview"
-                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                      />
-                    </div>
-                  ))}
+                  {listing.property.propertyMedia.slice(0, 3).map((m) => {
+                    const storedPath = m.url || m.filePath || "";
+                    const photoUrl = storedPath && !storedPath.startsWith("http") && !storedPath.startsWith("/")
+                      ? `/uploads/${storedPath}`
+                      : storedPath;
+
+                    return (
+                      <div
+                        key={m.id}
+                        style={{
+                          position: "relative",
+                          aspectRatio: "4/3",
+                          borderRadius: 4,
+                          overflow: "hidden",
+                          backgroundColor: "#eee",
+                        }}
+                      >
+                        {photoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={photoUrl}
+                            alt="Property preview"
+                            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                          />
+                        ) : (
+                          <div style={{ display: "grid", placeItems: "center", width: "100%", height: "100%", color: "var(--color-admin-text-muted)", fontSize: 11 }}>
+                            Foto belum tersedia
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireSuperAdmin } from "@/lib/api-auth";
+import { requireStaff, requireSuperAdmin } from "@/lib/api-auth";
 
 // GET /api/owners/[id]
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const guard = await requireStaff();
+  if (guard.error) return guard.error;
+
   const { id } = await params;
   const owner = await prisma.owner.findUnique({
     where: { id },
@@ -38,6 +41,9 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const guard = await requireStaff();
+  if (guard.error) return guard.error;
+
   const { id } = await params;
   try {
     const body = await request.json();

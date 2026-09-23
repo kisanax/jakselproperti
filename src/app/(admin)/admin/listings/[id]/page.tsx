@@ -77,6 +77,7 @@ export default async function ListingDetailPage({
       },
       propertyMedia: rawListing.property.propertyMedia.map((m) => ({
         id: m.id,
+        filePath: m.filePath,
         url: m.filePath.startsWith("http") ? m.filePath : `/uploads/${m.filePath}`,
         isPrimary: m.isPrimary,
       })),
